@@ -2,7 +2,7 @@
 TODOs.md
 examples/debug.py
 examples/test.py
-
+.idea
 # NumPy saves and videos
 files/logs/*.npy
 files/videos/*.mp4
