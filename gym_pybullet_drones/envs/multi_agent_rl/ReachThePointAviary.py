@@ -4,6 +4,8 @@ from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
 from gym_pybullet_drones.envs.multi_agent_rl.BaseMultiagentAviary import BaseMultiagentAviary
 
+SPHERE_POS = [0, 15, 1]
+
 
 class ReachThePointAviary(BaseMultiagentAviary):
     """Multi-agent RL problem: leader-follower."""
@@ -68,6 +70,7 @@ class ReachThePointAviary(BaseMultiagentAviary):
                          obs=obs,
                          act=act
                          )
+        self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
 
     ################################################################################
 
@@ -78,15 +81,28 @@ class ReachThePointAviary(BaseMultiagentAviary):
         Overrides BaseAviary's method.
 
         """
+
         import pybullet as p
         sphere = p.loadURDF("sphere_small.urdf",
-                            [7, 15, 1],
+                            SPHERE_POS,
                             p.getQuaternionFromEuler([0, 0, 0]),
                             physicsClientId=self.CLIENT,
                             useFixedBase=True,
                             globalScaling=10,
                             )
         p.changeVisualShape(sphere, -1, rgbaColor=[0, 0, 1, 1])
+
+        """
+        import pybullet as p
+        sphere = p.loadURDF(
+            "/home/cam/Desktop/Tutor/SVS/gym-pybullet-drones/experiments/SVS_Code/3D_Models/Hangar/hangar.urdf",
+            [0, 0, 0],
+            p.getQuaternionFromEuler([0, 0, 0]),
+            physicsClientId=self.CLIENT,
+            useFixedBase=True,
+            globalScaling=1 * 0.5,
+        )
+        """
 
     ################################################################################
 
@@ -101,11 +117,34 @@ class ReachThePointAviary(BaseMultiagentAviary):
         """
         rewards = {}
         states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
-        rewards[0] = -1 * np.linalg.norm(np.array([0, 0, 0.5]) - states[0, 0:3]) ** 2
-        # rewards[1] = -1 * np.linalg.norm(np.array([states[1, 0], states[1, 1], 0.5]) - states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD 
-        for i in range(1, self.NUM_DRONES):
-            rewards[i] = -(1 / self.NUM_DRONES) * np.linalg.norm(
-                np.array([states[i, 0], states[i, 1], states[0, 2]]) - states[i, 0:3]) ** 2
+        # rewards[1] = -1 * np.linalg.norm(np.array([states[1, 0], states[1, 1], 0.5]) - states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
+
+        for i in range(0, self.NUM_DRONES):
+            sphere_dist = np.linalg.norm(np.array([states[i, 0], states[i, 1], states[i, 2]]) - SPHERE_POS) ** 2
+            if self.last_drones_dist[i] > sphere_dist and self.last_drones_dist[i] - sphere_dist > 0.2:
+                self.last_drones_dist[i] = sphere_dist
+                rewards[i] = 0.1
+            else:
+                rewards[i] = -0.02
+        return rewards
+
+    def _computeRewardold(self):
+        """Computes the current reward value(s).
+
+        Returns
+        -------
+        dict[int, float]
+            The reward value for each drone.
+
+        """
+
+        rewards = {}
+        states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+        # rewards[1] = -1 * np.linalg.norm(np.array([states[1, 0], states[1, 1], 0.5]) - states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
+
+        for i in range(0, self.NUM_DRONES):
+            rewards[i] = -1 * np.linalg.norm(
+                np.array([states[i, 0], states[i, 1], states[i, 2]]) - SPHERE_POS) ** 2
         return rewards
 
     ################################################################################
@@ -120,7 +159,9 @@ class ReachThePointAviary(BaseMultiagentAviary):
             one additional boolean value for key "__all__".
 
         """
-        bool_val = True if self.step_counter / self.SIM_FREQ > self.EPISODE_LEN_SEC else False
+        bool_val = True if self.step_counter / self.SIM_FREQ > 30 else False
+        if bool_val:
+            self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
         done = {i: bool_val for i in range(self.NUM_DRONES)}
         done["__all__"] = bool_val  # True if True in done.values() else False
         return done

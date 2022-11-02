@@ -1,7 +1,4 @@
 """Learning script for multi-agent problems.
-
-Agents are based on `ray[rllib]`'s implementation of PPO and use a custom centralized critic.
-
 Example
 -------
 To run the script, type in a terminal:
@@ -58,7 +55,7 @@ from gym_pybullet_drones.envs.multi_agent_rl.MeetupAviary import MeetupAviary
 from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
 from gym_pybullet_drones.utils.Logger import Logger
 from env_builder import EnvBuilder
-from gym_pybullet_drones.utils.utils import str2bool
+from gym_pybullet_drones.utils.utils import str2bool, sync
 from ray.rllib.examples.models.shared_weights_model import (
 
     TorchSharedWeightsModel,
@@ -70,19 +67,23 @@ if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Multi-agent reinforcement learning experiments script')
     parser.add_argument('--num_drones', default=2, type=int, help='Number of drones (default: 2)', metavar='')
-    parser.add_argument('--env', default='leaderfollower', type=str, choices=['leaderfollower', 'flock', 'meetup'],
+    parser.add_argument('--env', default='ReachThePointAviary', type=str, choices=['ReachThePointAviary'],
                         help='Task (default: leaderfollower)', metavar='')
     parser.add_argument('--obs', default='kin', type=ObservationType, help='Observation space (default: kin)',
                         metavar='')
-    parser.add_argument('--act', default='one_d_rpm', type=ActionType, help='Action space (default: one_d_rpm)',
+    parser.add_argument('--act', default='pid', type=ActionType, help='Action space (default: one_d_rpm)',
                         metavar='')
     parser.add_argument('--algo', default='cc', type=str, choices=['cc'], help='MARL approach (default: cc)',
                         metavar='')
     parser.add_argument('--workers', default=1, type=int, help='Number of RLlib workers (default: 0)', metavar='')
     parser.add_argument('--debug', default=False, type=str2bool,
                         help='Run in one Thread if true, for debugger to work properly', metavar='')
-    parser.add_argument('--gui', default=True, type=str2bool,
+    parser.add_argument('--gui', default=False, type=str2bool,
                         help='Enable gui rendering', metavar='')
+    parser.add_argument('--exp', type=str,
+                        help='The experiment folder written as ./results/save-<env>-<num_drones>-<algo>-<obs>-<act>-<time_date>',
+                        metavar='')
+
     ARGS = parser.parse_args()
 
     #### Save directory ########################################
@@ -125,45 +126,120 @@ if __name__ == "__main__":
     ray.init(ignore_reinit_error=True, local_mode=ARGS.debug)
     from ray import tune
 
-    env_name = "ReachThePointAviary"
-    env_callable, obs_space, act_space = build_env_by_name(env_class=from_env_name_to_class(env_name),
-                                                           num_drones=ARGS.num_drones,
-                                                           aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS,
-                                                           obs=ARGS.obs,
-                                                           act=ARGS.act,
-                                                           gui=ARGS.gui
-                                                           )
+    env_callable, obs_space, act_space, temp_env = build_env_by_name(env_class=from_env_name_to_class(ARGS.env),
+                                                                     num_drones=ARGS.num_drones,
+                                                                     aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS,
+                                                                     obs=ARGS.obs,
+                                                                     act=ARGS.act,
+                                                                     gui=ARGS.gui
+                                                                     )
     #### Register the environment ##############################
-    register_env(env_name, env_callable)
+    register_env(ARGS.env, env_callable)
 
+    config = {
+        "env": ARGS.env,
+        "num_workers": 0 + ARGS.workers,
+        "num_gpus": torch.cuda.device_count(),
+        "batch_mode": "complete_episodes",
+        "framework": "torch",
+        # "lr": 5e-3,
+        "multiagent": {
+            # We only have one policy (calling it "shared").
+            # Class, obs/act-spaces, and config will be derived
+            # automatically.
+            "policies": {
+                "pol0": (None, obs_space[0], act_space[0], {"agent_id": 0, }),
+                "pol1": (None, obs_space[1], act_space[1], {"agent_id": 1, }),
+            },
+            "policy_mapping_fn": lambda x: "pol0" if x == 0 else "pol1",
+            # Always use "shared" policy.
+        }
+    }
     stop = {
-        "timesteps_total": 5000,  # 100000 ~= 10'
+        "timesteps_total": 750000,  # 100000 ~= 10'
         # "episode_reward_mean": 0,
         # "training_iteration": 100,
     }
 
-    tune.run(
-        "PPO",
-        stop=stop,
-        config={
-            "env": env_name,
-            "num_gpus": 0,
-            "framework": "torch",
-            "num_workers": 0,
-            "multiagent": {
-                # We only have one policy (calling it "shared").
-                # Class, obs/act-spaces, and config will be derived
-                # automatically.
-                "policies": {
-                    "pol0": (None, obs_space[0], act_space[0], {"agent_id": 0, }),
-                    "pol1": (None, obs_space[0], act_space[0], {"agent_id": 1, }),
-                },
-                "policy_mapping_fn": lambda x: "pol0" if x == 0 else "pol1",
-                # Always use "shared" policy.
+    if not ARGS.exp:
 
-            }
+        results = tune.run(
+            "PPO",
+            stop=stop,
+            config=config,
+            verbose=True,
+            progress_reporter=CLIReporter(max_progress_rows=10),
+            # checkpoint_freq=50000,
+            checkpoint_at_end=True,
+            local_dir=filename,
+        )
 
-        },
-    )
+        # check_learning_achieved(results, 1.0)
 
+        #### Save agent ############################################
+        checkpoints = results.get_trial_checkpoints_paths(trial=results.get_best_trial('episode_reward_mean',
+                                                                                       mode='max'
+                                                                                       ),
+                                                          metric='episode_reward_mean'
+                                                          )
+        with open(filename + '/checkpoint.txt', 'w+') as f:
+            f.write(checkpoints[0][0])
+
+        print(checkpoints)
+
+    else:
+
+        OBS = ObservationType.KIN if ARGS.exp.split("-")[4] == 'kin' else ObservationType.RGB
+        action_name = ARGS.exp.split("-")[5]
+        NUM_DRONES = int(ARGS.exp.split("-")[2])
+        ACT = [action for action in ActionType if action.value == action_name][0]
+        #### Restore agent #########################################
+        agent = ppo.PPOTrainer(config=config)
+        with open(ARGS.exp + '/checkpoint.txt', 'r+') as f:
+            checkpoint = f.read()
+        agent.restore(checkpoint)
+        print(checkpoint)
+
+        #### Extract and print policies ############################
+        policy0 = agent.get_policy("pol0")
+        policy1 = agent.get_policy("pol1")
+
+        #### Show, record a video, and log the model's performance #
+        obs = temp_env.reset()
+        logger = Logger(logging_freq_hz=int(temp_env.SIM_FREQ / temp_env.AGGR_PHY_STEPS),
+                        num_drones=NUM_DRONES
+                        )
+        if ACT in [ActionType.ONE_D_RPM, ActionType.ONE_D_DYN, ActionType.ONE_D_PID]:
+            action = {i: np.array([0]) for i in range(NUM_DRONES)}
+        elif ACT in [ActionType.RPM, ActionType.DYN, ActionType.VEL]:
+            action = {i: np.array([0, 0, 0, 0]) for i in range(NUM_DRONES)}
+        elif ACT == ActionType.PID:
+            action = {i: np.array([0, 0, 0]) for i in range(NUM_DRONES)}
+        else:
+            print("[ERROR] unknown ActionType")
+            exit()
+        start = time.time()
+        for i in range(6 * int(temp_env.SIM_FREQ / temp_env.AGGR_PHY_STEPS)):  # Up to 6''
+            #### Deploy the policies ###################################
+            temp = {}
+            temp[0] = policy0.compute_single_action(
+                np.hstack(obs[0]))  # Counterintuitive order, check params.json
+            temp[1] = policy1.compute_single_action(np.hstack(obs[1]))
+            action = {0: temp[0][0], 1: temp[1][0]}
+            obs, reward, done, info = temp_env.step(action)
+            temp_env.render()
+            if OBS == ObservationType.KIN:
+                for j in range(NUM_DRONES):
+                    logger.log(drone=j,
+                               timestamp=i / temp_env.SIM_FREQ,
+                               state=np.hstack([obs[j][0:3], np.zeros(4), obs[j][3:15], np.resize(action[j], (4))]),
+                               control=np.zeros(12)
+                               )
+            sync(np.floor(i * temp_env.AGGR_PHY_STEPS), start, temp_env.TIMESTEP)
+            # if done["__all__"]: obs = test_env.reset() # OPTIONAL EPISODE HALT
+        temp_env.close()
+        logger.save_as_csv("ma")  # Optional CSV save
+        logger.plot()
+
+    #### Shut down Ray #########################################
     ray.shutdown()
