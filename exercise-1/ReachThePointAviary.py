@@ -4,7 +4,7 @@ from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
 from gym_pybullet_drones.envs.multi_agent_rl.BaseMultiagentAviary import BaseMultiagentAviary
 
-SPHERE_POS = [0, 15, 1]
+GOAL_POSITION = [60, 0, 0]
 
 
 class ReachThePointAviary(BaseMultiagentAviary):
@@ -144,36 +144,30 @@ class ReachThePointAviary(BaseMultiagentAviary):
         # rewards[1] = -1 * np.linalg.norm(np.array([states[1, 0], states[1, 1], 0.5]) - states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
 
         for i in range(0, self.NUM_DRONES):
-            sphere_dist = np.linalg.norm(np.array([states[i, 0], states[i, 1], states[i, 2]]) - SPHERE_POS) ** 2
-            if self.last_drones_dist[i] > sphere_dist and self.last_drones_dist[i] - sphere_dist > 0.2:
-                self.last_drones_dist[i] = sphere_dist
-                rewards[i] = 0.025
+            goal_dist = np.linalg.norm(
+                np.array([states[i, 0], states[i, 1], states[i, 2]]) -  # Drone position.
+                np.array([GOAL_POSITION[0], states[i, 1], states[i, 2]])  # Goal barrier to surpass.
+                ) ** 2
+            #if self.last_drones_dist[i] > sphere_dist and self.last_drones_dist[i] - sphere_dist > 0.2:
+            #    self.last_drones_dist[i] = sphere_dist
+            #    rewards[i] = 0.025
+            #else:
+            #    rewards[i] = -0.005
+            if states[i, 0] > GOAL_POSITION[0]:
+                rewards[i] = 1
             else:
-                rewards[i] = -0.005
-        return rewards
-
-    def _computeRewardold(self):
-        """Computes the current reward value(s).
-
-        Returns
-        -------
-        dict[int, float]
-            The reward value for each drone.
-
-        """
-
-        rewards = {}
-        states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
-        # rewards[1] = -1 * np.linalg.norm(np.array([states[1, 0], states[1, 1], 0.5]) - states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
-
-        for i in range(0, self.NUM_DRONES):
-            rewards[i] = -1 * np.linalg.norm(
-                np.array([states[i, 0], states[i, 1], states[i, 2]]) - SPHERE_POS) ** 2
+                if states[i, 0] < 0:
+                    rewards[i] = states[i, 0] / 20
+                else:
+                #    rewards[i] = 0
+                    rewards[i] =  states[i, 0] / 60
         return rewards
 
     ################################################################################
 
     def _computeDone(self):
+        ##check the distance between the drone and the goal
+        WORLD_MARGIN = [[-20,60],[-10,10],[0,10]]
         """Computes the current done value(s).
 
         Returns
@@ -184,11 +178,26 @@ class ReachThePointAviary(BaseMultiagentAviary):
 
         """
         bool_val = True if self.step_counter / self.SIM_FREQ > 30 else False
-        if bool_val:
-            self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
         done = {i: bool_val for i in range(self.NUM_DRONES)}
-        done["__all__"] = bool_val  # True if True in done.values() else False
-        return done
+        if not bool_val:
+            drones_pos = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+            for i in range(self.NUM_DRONES):
+                if drones_pos[i][0] < WORLD_MARGIN[0][0] or drones_pos[i][0] > WORLD_MARGIN[0][1] or drones_pos[i][1] < WORLD_MARGIN[1][0] or drones_pos[i][1] > WORLD_MARGIN[1][1] or drones_pos[i][2] < WORLD_MARGIN[2][0] or drones_pos[i][2] > WORLD_MARGIN[2][1]:
+                    done[i] = True                       
+                else:
+                    done[i] = False
+                    
+            done["__all__"] = all(done.values()) 
+            if done["__all__"]:
+                print("All drones are exploded")
+        else:
+            done["__all__"] = True
+            print("Time is up")
+        return done              
+        # self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
+        # done["__all__"] = bool_val  # True if True in done.values() else False
+        # return done
+        
 
     ################################################################################
 
