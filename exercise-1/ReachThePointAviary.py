@@ -89,8 +89,9 @@ class ReachThePointAviary(BaseMultiagentAviary):
         if not hasattr(self, 'num_resets'):
             self.num_resets = 0
         if not hasattr(self, 'env_number'):
-            self.env_number = -1
+            self.env_number = 0
 
+        # Every 100 steps change env and load new spheres positions ffrom /envrionment_gen/
         if self.num_resets % 100 == 0:
             self.env_number += 1
             csv_file_path = "environment_generator/generated_envs/{0}/static_obstacles.csv".format(
@@ -99,18 +100,19 @@ class ReachThePointAviary(BaseMultiagentAviary):
             with open(csv_file_path, mode='r') as infile:
                 reader = csv.reader(infile)
                 # prefab_name,pos_x,pos_y,pos_z,radius
-                spheres = [[str(rows[0]), float(rows[1]), float(rows[2]), float(rows[3]), float(rows[4])] for rows in
+                self.spheres = [[str(rows[0]), float(rows[1]), float(rows[2]), float(rows[3]), float(rows[4])] for rows in
                         reader]
-        
-            for sphere in spheres:
-                temp = p.loadURDF(sphere[0],
-                                sphere[1:4:],
-                                p.getQuaternionFromEuler([0, 0, 0]),
-                                physicsClientId=self.CLIENT,
-                                useFixedBase=True,
-                                globalScaling=10 * sphere[4],
-                                )
-                p.changeVisualShape(temp, -1, rgbaColor=[0, 0, 1, 1])
+    
+        for sphere in self.spheres:
+            temp = p.loadURDF(sphere[0],
+                            sphere[1:4:],
+                            p.getQuaternionFromEuler([0, 0, 0]),
+                            physicsClientId=self.CLIENT,
+                            useFixedBase=True,
+                            globalScaling=10 * sphere[4],
+                            flags=p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
+                            )
+            p.changeVisualShape(temp, -1, rgbaColor=[0, 0, 1, 1])
 
         self.num_resets += 1
 

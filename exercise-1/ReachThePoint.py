@@ -86,12 +86,6 @@ if __name__ == "__main__":
 
     ARGS = parser.parse_args()
 
-    #### Save directory ########################################
-    filename = os.path.dirname(os.path.abspath(__file__)) + '/results/save-' + ARGS.env + '-' + str(
-        ARGS.num_drones) + '-' + ARGS.algo + '-' + ARGS.obs.value + '-' + ARGS.act.value + '-' + datetime.now().strftime(
-        "%m.%d.%Y_%H.%M.%S")
-    if not os.path.exists(filename):
-        os.makedirs(filename + '/')
 
     #### Print out current git commit hash #####################
     #if platform == "linux" or platform == "darwin":
@@ -146,7 +140,7 @@ if __name__ == "__main__":
         "num_gpus": torch.cuda.device_count(),
         "batch_mode": "complete_episodes",
         "framework": "torch",
-         "lr": 5e-3,
+         "lr": 5e-4,
         "multiagent": {
             # We only have one policy (calling it "shared").
             # Class, obs/act-spaces, and config will be derived
@@ -168,6 +162,13 @@ if __name__ == "__main__":
     }
 
     if not ARGS.exp:
+
+          #### Save directory ########################################
+        filename = os.path.dirname(os.path.abspath(__file__)) + '/results/save-' + ARGS.env + '-' + str(
+            ARGS.num_drones) + '-' + ARGS.algo + '-' + ARGS.obs.value + '-' + ARGS.act.value + '-' + datetime.now().strftime(
+            "%m.%d.%Y_%H.%M.%S")
+        if not os.path.exists(filename):
+            os.makedirs(filename + '/')
 
         results = tune.run(
             "PPO",
@@ -194,6 +195,13 @@ if __name__ == "__main__":
         print(checkpoints)
 
     else:
+
+          #### Save directory ########################################
+        filename = os.path.dirname(os.path.abspath(__file__)) + '/results/tryOfSave-' + ARGS.env + '-' + str(
+            ARGS.num_drones) + '-' + ARGS.algo + '-' + ARGS.obs.value + '-' + ARGS.act.value + '-' + datetime.now().strftime(
+            "%m.%d.%Y_%H.%M.%S")
+        if not os.path.exists(filename):
+            os.makedirs(filename + '/')
 
         OBS = ObservationType.KIN if ARGS.exp.split("-")[4] == 'kin' else ObservationType.RGB
         action_name = ARGS.exp.split("-")[5]
