@@ -1,17 +1,27 @@
+import pdb
 import numpy as np
 
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
 from gym_pybullet_drones.envs.multi_agent_rl.BaseMultiagentAviary import BaseMultiagentAviary
+import gym
 
 GOAL_POSITION = [60, 0, 0]
 
+dpp = np.array([[0, 0,  0.1125],
+                                [0.1588, 0.1588, 0.1125],
+                                [0.3176, 0.3176, 0.1125],
+                                [0.4764, 0.4764, 0.1125]])
+num_resets = -1
+env_number = -1
 
 class ReachThePointAviary(BaseMultiagentAviary):
     """Multi-agent RL problem: leader-follower."""
-
     ################################################################################
-
+    global dpp
+    global num_resets
+    global env_number
+    
     def __init__(self,
                  drone_model: DroneModel = DroneModel.CF2X, ##drone model
                  num_drones: int = 2, #number of drones
@@ -19,12 +29,13 @@ class ReachThePointAviary(BaseMultiagentAviary):
                  initial_xyzs=None, #n-shaped array containing the initial XYZ position of the drones(n)
                  initial_rpys=None, #n-shaped array containing the initial orientations of the drones (in radians).
                  physics: Physics = Physics.PYB, #physics of env
-                 freq: int = 240, #The frequency (Hz) at which the physics engine steps.
+                 freq: int = 240, #The frequency (Hz) at which the physics engine steps. 
                  aggregate_phy_steps: int = 1,
                  gui=False,
                  record=False,
                  obs: ObservationType = ObservationType.KIN,
                  act: ActionType = ActionType.RPM):
+        
         """Initialization of a multi-agent RL environment.
 
         Using the generic multi-agent RL superclass.
@@ -70,7 +81,7 @@ class ReachThePointAviary(BaseMultiagentAviary):
                          obs=obs,
                          act=act
                          )
-        self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
+        self.last_drones_dist = initial_xyzs
 
     ################################################################################
 
@@ -86,17 +97,16 @@ class ReachThePointAviary(BaseMultiagentAviary):
         import os
         from random import randrange
 
-        if not hasattr(self, 'num_resets'):
-            self.num_resets = 0
-        if not hasattr(self, 'env_number'):
-            self.env_number = 0
-
+        global num_resets
+        global env_number
+        num_resets += 1
+        
         # Every 100 steps change env and load new spheres positions ffrom /envrionment_gen/
-        if self.num_resets % 100 == 0:
-            self.env_number += 1
+        if num_resets % 100 == 0:
+            env_number += 1
             csv_file_path = "environment_generator/generated_envs/{0}/static_obstacles.csv".format(
-            "environment_" + str(self.env_number))
-
+            "environment_" + str(env_number))
+            
             with open(csv_file_path, mode='r') as infile:
                 reader = csv.reader(infile)
                 # prefab_name,pos_x,pos_y,pos_z,radius
@@ -114,7 +124,6 @@ class ReachThePointAviary(BaseMultiagentAviary):
                             )
             p.changeVisualShape(temp, -1, rgbaColor=[0, 0, 1, 1])
 
-        self.num_resets += 1
 
         """
         import pybullet as p
@@ -129,8 +138,8 @@ class ReachThePointAviary(BaseMultiagentAviary):
         """
 
     ################################################################################
-
     def _computeReward(self):
+        WORLD_MARGIN = [[-20,60],[-10,10],[0,10]]
         """Computes the current reward value(s).
 
         Returns
@@ -139,29 +148,68 @@ class ReachThePointAviary(BaseMultiagentAviary):
             The reward value for each drone.
 
         """
+        #using dpp from the class
+        global dpp
         rewards = {}
-        states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
-        # rewards[1] = -1 * np.linalg.norm(np.array([states[1, 0], states[1, 1], 0.5]) - states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
+        drones_states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+        # rewards[1] = -1 * np.linalg.norm(np.array([drones_states[1, 0], drones_states[1, 1], 0.5]) - drones_states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
 
         for i in range(0, self.NUM_DRONES):
             goal_dist = np.linalg.norm(
-                np.array([states[i, 0], states[i, 1], states[i, 2]]) -  # Drone position.
-                np.array([GOAL_POSITION[0], states[i, 1], states[i, 2]])  # Goal barrier to surpass.
+                np.array([drones_states[i, 0], drones_states[i, 1], drones_states[i, 2]]) -  # Drone position.
+                np.array([GOAL_POSITION[0], drones_states[i, 1], drones_states[i, 2]])  # Goal barrier to surpass.
                 ) ** 2
             #if self.last_drones_dist[i] > sphere_dist and self.last_drones_dist[i] - sphere_dist > 0.2:
             #    self.last_drones_dist[i] = sphere_dist
             #    rewards[i] = 0.025
             #else:
             #    rewards[i] = -0.005
-            if states[i, 0] > GOAL_POSITION[0]:
-                rewards[i] = 1
+            if drones_states[i, 1] >= WORLD_MARGIN[1][1] or drones_states[i, 1] <= WORLD_MARGIN[1][0]:
+                rewards[i] = -1
             else:
-                if states[i, 0] < 0:
-                    rewards[i] = states[i, 0] / 20
+                if drones_states[i, 0] > dpp[i, 0]:
+                    rewards[i] = 1 - abs(drones_states[i, 1])*0.033 - abs(-5+drones_states[i, 2])*0.066
+                elif drones_states[i, 0] < dpp[i, 0]:
+                    rewards[i] = -0.8
                 else:
-                #    rewards[i] = 0
-                    rewards[i] =  states[i, 0] / 60
-        return rewards
+                    rewards[i] = -0.5
+        dpp = drones_states[:, 0:3]
+
+        return rewards       
+             
+        
+    # def _computeReward(self):
+    #     """Computes the current reward value(s).
+
+    #     Returns
+    #     -------
+    #     dict[int, float]
+    #         The reward value for each drone.
+
+    #     """
+    #     rewards = {}
+    #     states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+    #     # rewards[1] = -1 * np.linalg.norm(np.array([states[1, 0], states[1, 1], 0.5]) - states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
+
+    #     for i in range(0, self.NUM_DRONES):
+    #         goal_dist = np.linalg.norm(
+    #             np.array([states[i, 0], states[i, 1], states[i, 2]]) -  # Drone position.
+    #             np.array([GOAL_POSITION[0], states[i, 1], states[i, 2]])  # Goal barrier to surpass.
+    #             ) ** 2
+    #         #if self.last_drones_dist[i] > sphere_dist and self.last_drones_dist[i] - sphere_dist > 0.2:
+    #         #    self.last_drones_dist[i] = sphere_dist
+    #         #    rewards[i] = 0.025
+    #         #else:
+    #         #    rewards[i] = -0.005
+    #         if states[i, 0] > GOAL_POSITION[0]:
+    #             rewards[i] = 1
+    #         else:
+    #             if states[i, 0] < 0:
+    #                 rewards[i] = states[i, 0] / 20
+    #             else:
+    #             #    rewards[i] = 0
+    #                 rewards[i] =  states[i, 0] / 60
+    #     return rewards
 
     ################################################################################
 
@@ -177,22 +225,21 @@ class ReachThePointAviary(BaseMultiagentAviary):
             one additional boolean value for key "__all__".
 
         """
+        #default > 30
         bool_val = True if self.step_counter / self.SIM_FREQ > 30 else False
         done = {i: bool_val for i in range(self.NUM_DRONES)}
         if not bool_val:
             drones_pos = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
             for i in range(self.NUM_DRONES):
                 if drones_pos[i][0] < WORLD_MARGIN[0][0] or drones_pos[i][0] > WORLD_MARGIN[0][1] or drones_pos[i][1] < WORLD_MARGIN[1][0] or drones_pos[i][1] > WORLD_MARGIN[1][1] or drones_pos[i][2] < WORLD_MARGIN[2][0] or drones_pos[i][2] > WORLD_MARGIN[2][1]:
-                    done[i] = True                       
+                    done[i] = True                                     
                 else:
                     done[i] = False
-                    
-            done["__all__"] = all(done.values()) 
-            if done["__all__"]:
-                print("All drones are exploded")
+            done["__all__"] = all(done.values())                
         else:
             done["__all__"] = True
             print("Time is up")
+                        
         return done              
         # self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
         # done["__all__"] = bool_val  # True if True in done.values() else False
