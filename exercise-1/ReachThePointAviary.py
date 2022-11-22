@@ -5,6 +5,7 @@ from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
 from gym_pybullet_drones.envs.multi_agent_rl.BaseMultiagentAviary import BaseMultiagentAviary
 import gym
+import pybullet as p
 import logging
 import random
 from gym import spaces
@@ -18,7 +19,7 @@ dpp = np.array([[0, 0,  0.1125],
                                 [0.3176, 0.3176, 0.1125],
                                 [0.4764, 0.4764, 0.1125]])
 num_resets = -1
-env_number = 199
+env_number = 145
 max_drones_states = [-13, -13, -13, -13]
 
 class ReachThePointAviary(BaseMultiagentAviary):
@@ -283,7 +284,8 @@ class ReachThePointAviary(BaseMultiagentAviary):
             for i in range(self.NUM_DRONES):
                 min_drone_dist_to_any_sphere = min([np.linalg.norm((np.array([drones_pos[i, x] for x in range(3)]) - np.array([s[x] for x in range(1, 4)]))**2) - s[4] for s in self.spheres])
                 if drones_pos[i][0] < WORLD_MARGIN[0][0] or drones_pos[i][0] > WORLD_MARGIN[0][1] or drones_pos[i][1] < WORLD_MARGIN[1][0] or drones_pos[i][1] > WORLD_MARGIN[1][1] or drones_pos[i][2] < WORLD_MARGIN[2][0] or drones_pos[i][2] > WORLD_MARGIN[2][1]:
-                    done[i] = True
+                    done["__all__"] = True
+                    return done
                 elif min_drone_dist_to_any_sphere <= 0.1:
                     done[i] = True
                 else:
@@ -320,8 +322,6 @@ class ReachThePointAviary(BaseMultiagentAviary):
         drone_dist_from_each_spheres[drone_dist_from_each_spheres > 10] = 10
 
         return drone_dist_from_each_spheres[:10] / 10
-
-        
 
 
     ################################################################################
