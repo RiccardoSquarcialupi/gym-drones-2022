@@ -18,7 +18,7 @@ dpp = np.array([[0, 0,  0.1125],
                                 [0.3176, 0.3176, 0.1125],
                                 [0.4764, 0.4764, 0.1125]])
 num_resets = -1
-env_number = -1
+env_number = 199
 max_drones_states = [-13, -13, -13, -13]
 
 class ReachThePointAviary(BaseMultiagentAviary):
@@ -304,8 +304,24 @@ class ReachThePointAviary(BaseMultiagentAviary):
                                               high=np.array([1,1,1, 1,1,1, 1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1]),
                                               dtype=np.float32
                                               ) for i in range(self.NUM_DRONES)})
-                                            
-    
+
+    def _computeObs(self):                                            
+        obs = super()._computeObs() 
+        for i in range(self.NUM_DRONES):
+            obs[i] = np.concatenate((obs[i], self._computeSphereDist(i)))
+        return obs 
+
+
+    def _computeSphereDist(self, drone):
+        drones_pos = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+        drone_dist_from_each_spheres = np.array([np.linalg.norm((np.array([drones_pos[drone, x] for x in range(3)]) - np.array([s[x] for x in range(1, 4)]))**2) - s[4] for s in self.spheres])
+        drone_dist_from_each_spheres.sort()
+        
+        drone_dist_from_each_spheres[drone_dist_from_each_spheres > 10] = 10
+
+        return drone_dist_from_each_spheres[:10] / 10
+
+        
 
 
     ################################################################################

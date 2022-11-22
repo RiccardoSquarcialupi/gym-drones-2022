@@ -23,6 +23,8 @@ else:
 random.seed(SEED)
 np.random.seed(SEED)
 
+print ("SEED: ", SEED)
+print ("DENSITY_MULTIPLIER: ", DENSITY_MULTIPLIER)
 
 class Trajectory:
     def __init__(self, config, traj_type="000000"):
