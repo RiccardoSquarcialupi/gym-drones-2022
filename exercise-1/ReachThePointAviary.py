@@ -114,6 +114,7 @@ class ReachThePointAviary(BaseMultiagentAviary):
         # Every 5 resets change env and load new spheres positions ffrom /envrionment_gen/
         if num_resets % 5 == 0:
             env_number += 1
+            env_number %= 200
             csv_file_path = "environment_generator/generated_envs/{0}/static_obstacles.csv".format(
             "environment_" + str(env_number))
             
