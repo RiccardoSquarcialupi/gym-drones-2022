@@ -12,26 +12,32 @@ from gym import spaces
 logging.basicConfig(filename='aviary.log')
 
 GOAL_POSITION = [60, 0, 0]
-WORLD_MARGIN = [[-20,60],[-10,10],[0,10]]
+WORLD_MARGIN = [[-20,60],[-9.5,9.5],[0.5,9.5]]
+SUBGOAL_POSITION = np.array([[-10,-5,0,5,10,15,20,25,30,35,40,45,50,55,60],[-10,-5,0,5,10,15,20,25,30,35,40,45,50,55,60],[-10,-5,0,5,10,15,20,25,30,35,40,45,50,55,60],[-10,-5,0,5,10,15,20,25,30,35,40,45,50,55,60]])
+countSubGoal= np.array([[0],[0],[0],[0]])
 
 dpp = np.array([[0, 0,  0.1125],
                                 [0.1588, 0.1588, 0.1125],
                                 [0.3176, 0.3176, 0.1125],
                                 [0.4764, 0.4764, 0.1125]])
 num_resets = -1
-env_number = 145
+env_number = 0
 max_drones_states = [-13, -13, -13, -13]
+past_drones_states = np.array([[-20,-20,-20],[-20,-20,-20],[-20,-20,-20],[-20,-20,-20]])
 
 class ReachThePointAviary(BaseMultiagentAviary):
     """Multi-agent RL problem: leader-follower."""
     ################################################################################
     global dpp
+    global countSubGoal
+    global SUBGOAL_POSITION
     global num_resets
     global env_number
     global max_drones_states
+    global past_drones_states
     global WORLD_MARGIN
     
-    initial_xyzs = np.array([[-10 + random.uniform(-3, 3), random.uniform(-5, 5), 1] for _ in range(4)])
+    initial_xyzs = np.array([[-13 + random.uniform(-3, 3), random.uniform(-5, 5), 1] for _ in range(4)])
 
     def __init__(self,
                  drone_model: DroneModel = DroneModel.CF2X, ##drone model
@@ -93,6 +99,7 @@ class ReachThePointAviary(BaseMultiagentAviary):
                          act=act
                          )
         self.last_drones_dist = initial_xyzs
+        self.past_drones_states = initial_xyzs[:, 0:3]
 
     ################################################################################
 
@@ -108,13 +115,19 @@ class ReachThePointAviary(BaseMultiagentAviary):
         import os
         from random import randrange
 
+        global max_drones_states
+        global past_drones_states
+
+        max_drones_states = [-13, -13, -13, -13]
+        past_drones_states = np.array([[-20,-20,-20],[-20,-20,-20],[-20,-20,-20],[-20,-20,-20]])
+        
         global num_resets
         global env_number
         num_resets += 1
         # Every 5 resets change env and load new spheres positions ffrom /envrionment_gen/
         if num_resets % 5 == 0:
             env_number += 1
-            env_number %= 200
+            env_number %= 201
             csv_file_path = "environment_generator/generated_envs/{0}/static_obstacles.csv".format(
             "environment_" + str(env_number))
             
@@ -148,50 +161,9 @@ class ReachThePointAviary(BaseMultiagentAviary):
         )
         """
 
-    def _computeReward(self):
-        
-        """Computes the current reward value(s).
 
-        Returns
-        -------
-        dict[int, float]
-            The reward value for each drone.
-
-        """
-
-        # Implementation with maximum postion reached so far per drone.
-        global max_drones_states
-        rewards = {}
-        drones_states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
-        # rewards[1] = -1 * np.linalg.norm(np.array([drones_states[1, 0], drones_states[1, 1], 0.5]) - drones_states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
-
-        for i in range(0, self.NUM_DRONES):
-            min_drone_dist_to_any_sphere = min([np.linalg.norm((np.array([drones_states[i, x] for x in range(3)]) - np.array([s[x] for x in range(1, 4)]))**2) - s[4] for s in self.spheres])
-            # Out of thw world margin.
-            if drones_states[i, 1] >= WORLD_MARGIN[1][1] or drones_states[i, 1] <= WORLD_MARGIN[1][0] or drones_states[i, 2] >= WORLD_MARGIN[2][1]:
-                rewards[i] = -1
-            # Collide with any sphere. 
-            elif min_drone_dist_to_any_sphere <= 0.1: # Considering a random static drone radius.
-                rewards[i] = -1
-            # Reached the goal.
-            elif drones_states[i, 0] >= GOAL_POSITION[0]:
-                rewards[i] = 1
-            # Drone actually moved farther then before.
-            elif drones_states[i, 0] > max_drones_states[i]:
-                rewards[i] = 0.3
-                max_drones_states[i] = drones_states[i, 0]
-            # Drone moveed back to his maximum position reached.
-            elif drones_states[i, 0] < max_drones_states[i]:
-                rewards[i] = -0.2
-            # Drone still on his maximum position reached so far.
-            else:
-                rewards[i] = -0.1
-        return rewards 
-
-
-    ################################################################################
     # def _computeReward(self):
-    #     WORLD_MARGIN = [[-20,60],[-10,10],[0,10]]
+        
     #     """Computes the current reward value(s).
 
     #     Returns
@@ -200,70 +172,189 @@ class ReachThePointAviary(BaseMultiagentAviary):
     #         The reward value for each drone.
 
     #     """
-    #     #using dpp from the class
-    #     global dpp
+
+    #     # Implementation with maximum postion reached so far per drone.
+    #     global max_drones_states
+    #     global past_drones_states
     #     rewards = {}
     #     drones_states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
     #     # rewards[1] = -1 * np.linalg.norm(np.array([drones_states[1, 0], drones_states[1, 1], 0.5]) - drones_states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
 
     #     for i in range(0, self.NUM_DRONES):
-    #         goal_dist = np.linalg.norm(
-    #             np.array([drones_states[i, 0], drones_states[i, 1], drones_states[i, 2]]) -  # Drone position.
-    #             np.array([GOAL_POSITION[0], drones_states[i, 1], drones_states[i, 2]])  # Goal barrier to surpass.
-    #             ) ** 2
-    #         #if self.last_drones_dist[i] > sphere_dist and self.last_drones_dist[i] - sphere_dist > 0.2:
-    #         #    self.last_drones_dist[i] = sphere_dist
-    #         #    rewards[i] = 0.025
-    #         #else:
-    #         #    rewards[i] = -0.005
-    #         if drones_states[i, 1] >= WORLD_MARGIN[1][1] or drones_states[i, 1] <= WORLD_MARGIN[1][0]:
-    #             rewards[i] = -1
-    #         else:
-    #             if drones_states[i, 0] > dpp[i, 0]:
-    #                 rewards[i] = 1 - abs(drones_states[i, 1])*0.033 - abs(-5+drones_states[i, 2])*0.066
-    #             elif drones_states[i, 0] < dpp[i, 0]:
-    #                 rewards[i] = -0.8
+    #         min_drone_dist_to_any_sphere = min([np.linalg.norm((np.array([drones_states[i, x] for x in range(3)]) - np.array([s[x] for x in range(1, 4)]))**2) - s[4] for s in self.spheres])
+    #         # Out of thw world margin.
+    #         if drones_states[i, 1] >= WORLD_MARGIN[1][1] or drones_states[i, 1] <= WORLD_MARGIN[1][0] or drones_states[i, 2] >= WORLD_MARGIN[2][1] or drones_states[i, 2] <= WORLD_MARGIN[2][0] or drones_states[i, 0] <= WORLD_MARGIN[0][0]:
+    #             rewards[i] = -5
+    #         # Collide with any sphere. 
+    #         elif min_drone_dist_to_any_sphere <= 0.1: # Considering a random static drone radius.
+    #             rewards[i] = -5
+    #         # Reached the goal.
+    #         elif drones_states[i, 0] >= GOAL_POSITION[0]:
+    #             rewards[i] = 10
+    #         # Drone actually moved farther then before.
+    #         elif drones_states[i, 0] > past_drones_states[i]:
+    #             if  min_drone_dist_to_any_sphere > 0.1 and min_drone_dist_to_any_sphere < 0.4:
+    #                 #when he reach the spherers it should navigate around it and after go straight
+    #                 if drones_states[i, 1] <= past_drones_states[i, 1]- 0.2 or drones_states[i, 1] >= past_drones_states[i, 1] +0.2 or drones_states[i, 2] <= past_drones_states[i, 2]-0.2 or drones_states[i, 2] >= past_drones_states[i, 2] +0.2:
+    #                     rewards[i] = -1
+    #                 else:
+    #                     rewards[i] = 1
+    #             elif drones_states[i, 10] > 0.4:
+    #                 rewards[i] = 1
+    #             elif drones_states[i, 10] > 0.2:
+    #                 rewards[i] = 0.5
+    #             elif drones_states[i, 10] > 0.1:
+    #                 rewards[i] = 0.2
     #             else:
-    #                 rewards[i] = -0.5
-    #     dpp = drones_states[:, 0:3]
+    #                 rewards[i] = -0.2
+    #             # elif drones_states[i, 10] < 0.2:
+    #             #     rewards[i] = 0.2
+    #             #elif drones_states[i,10] < 1:
+    #                 #rewards[i] = drones_states[i,10]
+    #                 #print("rewards drone number",i,": ",rewards[i])
+    #                 #rewards[i] = 0.3
+    #             #rewards[i] = 2
+    #             max_drones_states[i] = drones_states[i, 0]
+    #         # Drone moveed back to his maximum position reached.
+    #         elif drones_states[i, 0] < past_drones_states[i]:
+    #             rewards[i] = -0.5
+    #         # Drone still on his maximum position reached so far.
+    #         else:
+    #             rewards[i] = 0
+            
+    #         if rewards[i] > 0 and (drones_states[i, 1] > -7.5 and drones_states[i, 1] < 7.5 and drones_states[i, 2] > 2.5 and drones_states[i, 2] < 7.5):
+    #             rewards[i] = 2*rewards[i]
+                
+    #         past_drones_states[i] = drones_states[i, 0:3]
 
-    #     return rewards       
-             
-        
-    # def _computeReward(self):
-    #     """Computes the current reward value(s).
+    #         print("REWARDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD" + rewards[i])
+            
+    #     return rewards 
+
+    # def _computeDone(self):
+    #     ##check the distance between the drone and the goal
+    #     WORLD_MARGIN = [[-20,60],[-10,10],[0,10]]
+    #     """Computes the current done value(s).
 
     #     Returns
     #     -------
-    #     dict[int, float]
-    #         The reward value for each drone.
+    #     dict[int | "__all__", bool]
+    #         Dictionary with the done value of each drone and 
+    #         one additional boolean value for key "__all__".
 
     #     """
+    #     #default > 30
+    #     bool_val = True if self.step_counter / self.SIM_FREQ > 30 else False
+    #     done = {i: bool_val for i in range(self.NUM_DRONES)}
+    #     if not bool_val:
+    #         drones_pos = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+    #         for i in range(self.NUM_DRONES):
+    #             min_drone_dist_to_any_sphere = min([np.linalg.norm((np.array([drones_pos[i, x] for x in range(3)]) - np.array([s[x] for x in range(1, 4)]))**2) - s[4] for s in self.spheres])
+    #             if drones_pos[i,0] < WORLD_MARGIN[0][0] or drones_pos[i,0] > WORLD_MARGIN[0][1] or drones_pos[i,1] < WORLD_MARGIN[1][0] or drones_pos[i,1] > WORLD_MARGIN[1][1] or drones_pos[i,2] < WORLD_MARGIN[2][0] or drones_pos[i,2] > WORLD_MARGIN[2][1]:
+    #                 done[i] = True
+    #             elif min_drone_dist_to_any_sphere <= 0.1:
+    #                 done[i] = True
+    #             else:
+    #                 done[i] = False
+    #         done["__all__"] = any(done.values())                
+    #     else:
+    #         done["__all__"] = True
+    #         print("Time is up")
+    #     return done              
+    #     # self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
+    #     # done["__all__"] = bool_val  # True if True in done.values() else False
+    #     # return done
+    
+    def _computeReward(self): #use this after
+
+        # Implementation with maximum postion reached so far per drone.
+        global max_drones_states
+        global past_drones_states
+        rewards = {}
+        drones_states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+        # rewards[1] = -1 * np.linalg.norm(np.array([drones_states[1, 0], drones_states[1, 1], 0.5]) - drones_states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
+
+        for i in range(0, self.NUM_DRONES):
+            #foreach drones compute the distance from the closest spheres
+            min_drone_dist_to_any_sphere = min([np.linalg.norm(np.array([drones_states[i, x] for x in range(3)]) - np.array([s[x] for x in range(1, 4)])) - s[4] for s in self.spheres])
+            # Out of thw world margin.
+            if drones_states[i, 1] >= WORLD_MARGIN[1][1] or drones_states[i, 1] <= WORLD_MARGIN[1][0] or drones_states[i, 2] >= WORLD_MARGIN[2][1] or drones_states[i, 2] <= WORLD_MARGIN[2][0] or drones_states[i, 0] <= WORLD_MARGIN[0][0]:
+                rewards[i] = -1
+            # Collide with the closest sphere.
+            elif min_drone_dist_to_any_sphere <= 0.1: # Considering a random static drone radius.
+                rewards[i] = -1
+            # if vel > 0 and drone x-axis is a new maximum position reached so far.
+            elif drones_states[i, 10] >= 0.2 and drones_states[i, 0] > max_drones_states[i]:
+                #if a subgoal is not reached:
+                if  drones_states[i, 0] < SUBGOAL_POSITION[i,countSubGoal[i]]:
+                    #get a reward proportional to the distance from the subgoal
+                    rewards[i] = 0.5 - ((SUBGOAL_POSITION[i,countSubGoal[i]] - drones_states[i, 0]) / 10)
+                #if a subgoal is reached:
+                elif drones_states[i, 0] >= SUBGOAL_POSITION[i,countSubGoal[i]] and countSubGoal[i] < 14:
+                    #get 1 reward
+                    countSubGoal[i]+=1
+                    rewards[i] = 1
+                #if all subgoals are reached(horizon reached):
+                elif drones_states[i, 0] >= SUBGOAL_POSITION[i,countSubGoal[i]] and countSubGoal[i] == 14:
+                    #get 1 reward
+                    rewards[i] = 10
+                #update the maximum position reached so far
+                max_drones_states[i] = drones_states[i, 0]
+            else:
+                rewards[i] = 0
+            
+        past_drones_states = drones_states[:, 0:3]
+        return rewards 
+    
+    # def _computeReward(self):
+
+    #     # Implementation with maximum postion reached so far per drone.
+    #     global max_drones_states
+    #     global past_drones_states
     #     rewards = {}
-    #     states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
-    #     # rewards[1] = -1 * np.linalg.norm(np.array([states[1, 0], states[1, 1], 0.5]) - states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
+    #     drones_states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+    #     # rewards[1] = -1 * np.linalg.norm(np.array([drones_states[1, 0], drones_states[1, 1], 0.5]) - drones_states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
 
     #     for i in range(0, self.NUM_DRONES):
-    #         goal_dist = np.linalg.norm(
-    #             np.array([states[i, 0], states[i, 1], states[i, 2]]) -  # Drone position.
-    #             np.array([GOAL_POSITION[0], states[i, 1], states[i, 2]])  # Goal barrier to surpass.
-    #             ) ** 2
-    #         #if self.last_drones_dist[i] > sphere_dist and self.last_drones_dist[i] - sphere_dist > 0.2:
-    #         #    self.last_drones_dist[i] = sphere_dist
-    #         #    rewards[i] = 0.025
-    #         #else:
-    #         #    rewards[i] = -0.005
-    #         if states[i, 0] > GOAL_POSITION[0]:
+    #         #foreach drones compute the distance from the closest spheres
+    #         min_drone_dist_to_any_sphere = min([np.linalg.norm((np.array([drones_states[i, x] for x in range(3)]) - np.array([s[x] for x in range(1, 4)]))**2) - s[4] for s in self.spheres])
+    #         # Out of thw world margin.
+    #         if drones_states[i, 1] >= WORLD_MARGIN[1][1] or drones_states[i, 1] <= WORLD_MARGIN[1][0] or drones_states[i, 2] >= WORLD_MARGIN[2][1] or drones_states[i, 2] <= WORLD_MARGIN[2][0] or drones_states[i, 0] <= WORLD_MARGIN[0][0]:
+    #             rewards[i] = -1
+    #         # Collide with the closest sphere. 
+    #         elif min_drone_dist_to_any_sphere <= 0.1: # Considering a random static drone radius.
+    #             rewards[i] = -1
+    #         # Reached the i-esim subgoal.
+    #         elif drones_states[i, 10] <= 0:
+    #             rewards[i] = -1
+    #         elif drones_states[i, 0] == past_drones_states[i, 0] and drones_states[i, 1] == past_drones_states[i, 1] and drones_states[i, 2] == past_drones_states[i, 2]:
+    #             rewards[i] = -1
+    #         elif  drones_states[i, 0] < SUBGOAL_POSITION[i,countSubGoal[i]]:
+    #             rewards[i] = 0.5 - ((SUBGOAL_POSITION[i,countSubGoal[i]] - drones_states[i, 0]) / 10)
+    #             if drones_states[i, 1] >= 0 and drones_states[i, 1] < 10 and drones_states[i, 2] >= 5 and drones_states[i, 2] < 10:
+    #                 if drones_states[i, 1] < past_drones_states[i, 1] and drones_states[i, 2] < past_drones_states[i, 2]:
+    #                     rewards[i] += 0.1
+    #             elif drones_states[i, 1] >= 0 and drones_states[i, 1] < 10 and drones_states[i, 2] > 0 and drones_states[i, 2] < 5:
+    #                 if drones_states[i, 1] < past_drones_states[i, 1] and drones_states[i, 2] > past_drones_states[i, 2]:
+    #                     rewards[i] += 0.1
+    #             elif drones_states[i, 1] < 0 and drones_states[i, 1] > -10 and drones_states[i, 2] >= 5 and drones_states[i, 2] < 10:
+    #                 if drones_states[i, 1] > past_drones_states[i, 1] and drones_states[i, 2] < past_drones_states[i, 2]:
+    #                     rewards[i] += 0.1
+    #             elif drones_states[i, 1] > -10 and drones_states[i, 1] < 0 and drones_states[i, 2] > 0 and drones_states[i, 2] < 5:
+    #                 if drones_states[i, 1] > past_drones_states[i, 1] and drones_states[i, 2] > past_drones_states[i, 2]:
+    #                     rewards[i] += 0.1
+    #             elif drones_states[i, 1] == 0 and drones_states[i, 2] == 5:
+    #                 rewards[i] += 0.2
+    #         elif drones_states[i, 0] >= SUBGOAL_POSITION[i,countSubGoal[i]] and countSubGoal[i] < 14:
+    #             countSubGoal[i]+=1
+    #             rewards[i] = 1
+    #         elif drones_states[i, 0] >= SUBGOAL_POSITION[i,countSubGoal[i]] and countSubGoal[i] == 14:
     #             rewards[i] = 1
     #         else:
-    #             if states[i, 0] < 0:
-    #                 rewards[i] = states[i, 0] / 20
-    #             else:
-    #             #    rewards[i] = 0
-    #                 rewards[i] =  states[i, 0] / 60
-    #     return rewards
-
-    ################################################################################
+    #             rewards[i] = 0
+            
+    #     past_drones_states = drones_states[:, 0:3]
+    #     return rewards 
 
     def _computeDone(self):
         ##check the distance between the drone and the goal
@@ -284,9 +375,8 @@ class ReachThePointAviary(BaseMultiagentAviary):
             drones_pos = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
             for i in range(self.NUM_DRONES):
                 min_drone_dist_to_any_sphere = min([np.linalg.norm((np.array([drones_pos[i, x] for x in range(3)]) - np.array([s[x] for x in range(1, 4)]))**2) - s[4] for s in self.spheres])
-                if drones_pos[i][0] < WORLD_MARGIN[0][0] or drones_pos[i][0] > WORLD_MARGIN[0][1] or drones_pos[i][1] < WORLD_MARGIN[1][0] or drones_pos[i][1] > WORLD_MARGIN[1][1] or drones_pos[i][2] < WORLD_MARGIN[2][0] or drones_pos[i][2] > WORLD_MARGIN[2][1]:
-                    done["__all__"] = True
-                    return done
+                if drones_pos[i,0] < WORLD_MARGIN[0][0] or drones_pos[i,0] > WORLD_MARGIN[0][1] or drones_pos[i,1] < WORLD_MARGIN[1][0] or drones_pos[i,1] > WORLD_MARGIN[1][1] or drones_pos[i,2] < WORLD_MARGIN[2][0] or drones_pos[i,2] > WORLD_MARGIN[2][1]:
+                    done[i] = True
                 elif min_drone_dist_to_any_sphere <= 0.1:
                     done[i] = True
                 else:
@@ -303,25 +393,25 @@ class ReachThePointAviary(BaseMultiagentAviary):
 
     def _observationSpace(self):
         # Latest 10 numbers are for spheres distance from each drone.
-        return spaces.Dict({i: spaces.Box(low=np.array([-1,-1,0, -1,-1,-1, -1,-1,-1, -1,-1,-1,0,0,0,0,0,0,0,0,0,0]),
-                                              high=np.array([1,1,1, 1,1,1, 1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1]),
+        return spaces.Dict({i: spaces.Box(low=np.array([-1,-1,0, -1,-1,-1, -1,-1,-1, -1,-1,-1,0,0,0,0,0,0,0,0,0,0,-1,0,-1,0,0,0]),
+                                              high=np.array([1,1,1, 1,1,1, 1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1]),
                                               dtype=np.float32
                                               ) for i in range(self.NUM_DRONES)})
 
-    def _computeObs(self):                                            
+    def _computeObs(self):   
+        WORLD_MARGIN1 = [-1,1,-1,1,0,1]                                        
         obs = super()._computeObs() 
         for i in range(self.NUM_DRONES):
             obs[i] = np.concatenate((obs[i], self._computeSphereDist(i)))
-        return obs 
+            obs[i] = np.concatenate((obs[i], WORLD_MARGIN1 ))
+        return obs
 
 
     def _computeSphereDist(self, drone):
         drones_pos = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
         drone_dist_from_each_spheres = np.array([np.linalg.norm((np.array([drones_pos[drone, x] for x in range(3)]) - np.array([s[x] for x in range(1, 4)]))**2) - s[4] for s in self.spheres])
         drone_dist_from_each_spheres.sort()
-        
         drone_dist_from_each_spheres[drone_dist_from_each_spheres > 10] = 10
-
         return drone_dist_from_each_spheres[:10] / 10
 
 

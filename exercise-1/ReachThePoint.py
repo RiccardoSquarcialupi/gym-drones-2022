@@ -140,7 +140,11 @@ if __name__ == "__main__":
         "num_gpus": torch.cuda.device_count(),
         "batch_mode": "complete_episodes",
         "framework": "torch",
-         "lr": 5e-4,
+        #"rollout_fragment_length" : 200,
+        "lr" : 1e-4,
+        #"entropy_coeff": 0.000001,
+        "gamma": 0.9999,
+        "preprocessor_pref": "deepmind",
         "multiagent": {
             # We only have one policy (calling it "shared").
             # Class, obs/act-spaces, and config will be derived
@@ -156,7 +160,7 @@ if __name__ == "__main__":
         }
     }
     stop = {
-        "timesteps_total": 1000000,  # 100000 ~= 10'
+        "timesteps_total": 50000,  # 100000 ~= 10'
         # "episode_reward_mean": 0,
         # "training_iteration": 100,
     }
