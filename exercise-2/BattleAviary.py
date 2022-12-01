@@ -359,11 +359,11 @@ class BattleAviary(BaseMultiagentAviary):
     def step(self, action):
 
         # Visualize the image
-        # img = self._getDroneImages(1, False)
-        # import matplotlib.pyplot as plt
-        # plt.imshow(img, cmap='gray', vmin=0, vmax=255)
-        # plt.pause(0.0001)
-        # plt.show(block=False)
+        img = self._getDroneImages(1, False)
+        import matplotlib.pyplot as plt
+        plt.imshow(img, cmap='gray', vmin=0, vmax=255)
+        plt.pause(0.0001)
+        plt.show(block=False)
         import random
         for drone_index, gym_dict in action.items():
             if gym_dict["shoot_space"] == 1:
@@ -375,7 +375,7 @@ class BattleAviary(BaseMultiagentAviary):
         import pybullet as p
         rot_mat = np.array(p.getMatrixFromQuaternion(self.quat[drone_index, :])).reshape(3, 3)
         #### Set target point, camera view and projection matrices #
-        target = np.dot(rot_mat, np.array([1000, 0, 0])) + np.array(self.pos[drone_index, :])
+        target = np.dot(rot_mat, np.array([100, 0, 0])) + np.array(self.pos[drone_index, :])
         # fix drone index, 0 is the floor
         drone_index += 1
 
@@ -395,12 +395,8 @@ class BattleAviary(BaseMultiagentAviary):
                           )
         # liner_and_angular_velocity = p.getBaseVelocity(drone_index, physicsClientId=self.CLIENT)
         # projectivle are black
-        euler = p.getEulerFromQuaternion(pos_and_orientation[1])
-        print("####################################")
-        print(euler)
-        print("#############################")
         p.changeVisualShape(temp, -1, rgbaColor=[0, 0, 0, 1], physicsClientId=self.CLIENT)
-        p.resetBaseVelocity(temp, euler*50*20, [0, 0, 0], physicsClientId=self.CLIENT)
+        p.resetBaseVelocity(temp, target, [0, 0, 0], physicsClientId=self.CLIENT)
 
     ################################################################################
     def _computeReward(self):
