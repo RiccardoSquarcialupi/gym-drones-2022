@@ -26,7 +26,7 @@ class BattleAviary(BaseMultiagentAviary):
                  initial_xyzs=None,
                  initial_rpys=None,
                  physics: Physics = Physics.PYB,
-                 freq: int = 2400,
+                 freq: int = 240,
                  aggregate_phy_steps: int = 1,
                  gui=False,
                  record=False,
@@ -79,6 +79,7 @@ class BattleAviary(BaseMultiagentAviary):
                          )
         self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
         self.IMG_RES = np.array([160, 120])
+        self.drones_sphere = [np.array([], dtype=np.int32) for _ in range(self.NUM_DRONES)]
         if not p.isNumpyEnabled():
             logging.warning("Numpy speed-up camera, try to activate it!")
 
@@ -102,7 +103,7 @@ class BattleAviary(BaseMultiagentAviary):
         # disable shadows for better images
         p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
         # add hangar urdf
-
+        self.drones_spheres = [np.array([], dtype=np.int32) for _ in range(self.NUM_DRONES)]
         for i in range(1, self.NUM_DRONES + 1):
             if i > self.NUM_DRONES / 2:
                 # red
@@ -367,8 +368,20 @@ class BattleAviary(BaseMultiagentAviary):
         import random
         for drone_index, gym_dict in action.items():
             if gym_dict["shoot_space"] == 1:
-                if random.random() > 0.95:
-                    self._drone_shoot(drone_index)
+                if random.random() > 0.5:
+                    self.drones_spheres[drone_index] = np.append(self.drones_spheres[drone_index], self._drone_shoot(drone_index))
+            try:
+                removable_spheres = np.array([], dtype=np.int32)
+                for sphere in self.drones_spheres[drone_index]:
+                    if(p.getBasePositionAndOrientation(sphere)[0][2] < 1.1):
+                        p.removeBody(sphere)
+                        removable_spheres = np.append(removable_spheres, sphere)
+
+                self.drones_spheres[drone_index] = np.setdiff1d(self.drones_spheres[drone_index], removable_spheres)
+            except:
+                print("Error  of pybullet")
+            
+                    
         return super().step(action)
 
     def _drone_shoot(self, drone_index):
@@ -397,6 +410,7 @@ class BattleAviary(BaseMultiagentAviary):
         # projectivle are black
         p.changeVisualShape(temp, -1, rgbaColor=[0, 0, 0, 1], physicsClientId=self.CLIENT)
         p.resetBaseVelocity(temp, target, [0, 0, 0], physicsClientId=self.CLIENT)
+        return temp
 
     ################################################################################
     def _computeReward(self):
