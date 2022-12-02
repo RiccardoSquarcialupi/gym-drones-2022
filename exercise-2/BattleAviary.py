@@ -360,11 +360,11 @@ class BattleAviary(BaseMultiagentAviary):
     def step(self, action):
 
         # Visualize the image
-        img = self._getDroneImages(1, False)
-        import matplotlib.pyplot as plt
-        plt.imshow(img, cmap='gray', vmin=0, vmax=255)
-        plt.pause(0.0001)
-        plt.show(block=False)
+        # img = self._getDroneImages(1, False)
+        # import matplotlib.pyplot as plt
+        # plt.imshow(img, cmap='gray', vmin=0, vmax=255)
+        # plt.pause(0.0001)
+        # plt.show(block=False)
         import random
         for drone_index, gym_dict in action.items():
             if gym_dict["shoot_space"] == 1:
@@ -376,10 +376,9 @@ class BattleAviary(BaseMultiagentAviary):
                     if(p.getBasePositionAndOrientation(sphere)[0][2] < 1.1):
                         p.removeBody(sphere)
                         removable_spheres = np.append(removable_spheres, sphere)
-
                 self.drones_spheres[drone_index] = np.setdiff1d(self.drones_spheres[drone_index], removable_spheres)
             except:
-                print("Error  of pybullet")
+                pass
             
                     
         return super().step(action)

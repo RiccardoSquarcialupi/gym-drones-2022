@@ -42,7 +42,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_drones', default=2, type=int, help='Number of drones (default: 2)', metavar='')
     parser.add_argument('--obs', default='kin', type=ObservationType, help='Observation space (default: kin)',
                         metavar='')
-    parser.add_argument('--act', default='pid', type=ActionType, help='Action space (default: one_d_rpm)',
+    parser.add_argument('--act', default='dyn', type=ActionType, help='Action space (default: one_d_rpm)',
                         metavar='')
     parser.add_argument('--algo', default='cc', type=str, choices=['cc'], help='MARL approach (default: cc)',
                         metavar='')
