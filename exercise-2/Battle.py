@@ -19,6 +19,8 @@ import argparse
 from datetime import datetime
 from sys import platform
 import subprocess
+import sys
+sys.path.append('../')
 import numpy as np
 import torch
 import torch.nn as nn
@@ -110,7 +112,9 @@ if __name__ == "__main__":
     env = "BattleAviary"
 
     import importlib
-    module = importlib.import_module('exercise-2.' + env)
+    #use only env, using module cause errors in train
+    module = importlib.import_module(env)
+    #module = importlib.import_module('exercise-2.' + env)
     env_class_imported = getattr(module, env)
 
     env_callable, obs_space, act_space, temp_env = build_env_by_name(env_class=env_class_imported,
