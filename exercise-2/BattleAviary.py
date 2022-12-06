@@ -79,10 +79,11 @@ class BattleAviary(BaseMultiagentAviary):
                          act=act
                          )
         self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
-        self.IMG_RES = np.array([160, 120])
+        self.IMG_RES = np.array([640, 480])
         self.drones_sphere = [np.array([], dtype=np.int32) for _ in range(self.NUM_DRONES)]
         if not p.isNumpyEnabled():
             logging.warning("Numpy speed-up camera, try to activate it!")
+            p.enableNumpySpeedup()
 
     ################################################################################
 
@@ -359,17 +360,30 @@ class BattleAviary(BaseMultiagentAviary):
         return rgb
 
     def step(self, action):
-
+        import cv2
         # Visualize the image
-        # img = self._getDroneImages(1, False)
-        # import matplotlib.pyplot as pltk
-        # plt.imshow(img, cmap='gray', vmin=0, vmax=255)
-        # plt.pause(0.0001)
-        # plt.show(block=False)
+        img = self._getDroneImages(0, False)
+        bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        black_upper = np.array([180, 255, 255])
+        black_lower = np.array([60, 35, 140])
+        mask = cv2.inRange(hsv, black_lower, black_upper)
+        result = cv2.bitwise_and(img, img, mask=mask)
+        cv2.imshow('image', result)
+        cv2.imshow('mask', mask)
+        cv2.waitKey(10)
+        #print("IMG: " + str(img.shape))
+        #print("FILTER: " + str(filter.shape))
+        #print(filter)
+        #print(filter)
+        import matplotlib.pyplot as plt
+        plt.imshow(img, cmap='gray', vmin=0, vmax=255)
+        plt.pause(0.0001)
+        plt.show(block=False)
         import random
         for drone_index, gym_dict in action.items():
             if gym_dict["shoot_space"] == 1:
-                if random.random() > 0.5:
+                if random.random() > 0.95:
                     self.drones_spheres[drone_index] = np.append(self.drones_spheres[drone_index], self._drone_shoot(drone_index))
             try:
                 removable_spheres = np.array([], dtype=np.int32)

@@ -1,10 +1,10 @@
 #COMMAND for porting:
 	#create env
 	conda create -n battle-exp
+	conda activate battle-exp
 	conda install python=3.7
 	#wait for conda to install everything(5/10 min required)
 	#activate env 	
-	conda activate battle-exp
 	#install all the required lib
 	conda install -c conda-forge ray-rllib libgcc poetry numpy pytorch pybullet
 	#build the project
