@@ -361,7 +361,7 @@ class BattleAviary(BaseMultiagentAviary):
 
         # Visualize the image
         # img = self._getDroneImages(1, False)
-        # import matplotlib.pyplot as plt
+        # import matplotlib.pyplot as pltk
         # plt.imshow(img, cmap='gray', vmin=0, vmax=255)
         # plt.pause(0.0001)
         # plt.show(block=False)
@@ -425,13 +425,16 @@ class BattleAviary(BaseMultiagentAviary):
         states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
         # rewards[1] = -1 * np.linalg.norm(np.array([states[1, 0], states[1, 1], 0.5]) - states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
 
+        for i in range(self.NUM_DRONES):
+            rewards[i] = 0
         for i in range(0, self.NUM_DRONES):
-            sphere_dist = np.linalg.norm(np.array([states[i, 0], states[i, 1], states[i, 2]]) - SPHERE_POS) ** 2
-            if self.last_drones_dist[i] > sphere_dist and self.last_drones_dist[i] - sphere_dist > 0.2:
-                self.last_drones_dist[i] = sphere_dist
-                rewards[i] = 0.1
-            else:
-                rewards[i] = -0.02
+            # If on the floor.
+            if states[i][2] < 2:
+                rewards[i] -= 10
+                # Any other drone gets reward. (should be once not always, should consider teams).
+                for j in range(self.NUM_DRONES):
+                    if j != i:
+                        rewards[j] += 1
         return rewards
 
     ################################################################################
@@ -449,7 +452,7 @@ class BattleAviary(BaseMultiagentAviary):
 
         done = {i: False for i in range(self.NUM_DRONES)}
         done["__all__"] = False
-        if self.step_counter > 100000:
+        if self.step_counter > 1000:
             done[0] = True
             done[1] = True
             done["__all__"] = True
