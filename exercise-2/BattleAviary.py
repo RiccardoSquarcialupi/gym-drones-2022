@@ -27,7 +27,7 @@ class BattleAviary(BaseMultiagentAviary):
                  initial_xyzs=None,
                  initial_rpys=None,
                  physics: Physics = Physics.PYB,
-                 freq: int = 2400,
+                 freq: int = 240,
                  aggregate_phy_steps: int = 1,
                  gui=False,
                  record=False,
@@ -80,6 +80,7 @@ class BattleAviary(BaseMultiagentAviary):
                          )
         self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
         self.IMG_RES = np.array([160, 120])
+        self.drones_sphere = [np.array([], dtype=np.int32) for _ in range(self.NUM_DRONES)]
         if not p.isNumpyEnabled():
             logging.warning("Numpy speed-up camera, try to activate it!")
 
@@ -103,7 +104,7 @@ class BattleAviary(BaseMultiagentAviary):
         # disable shadows for better images
         p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
         # add hangar urdf
-
+        self.drones_spheres = [np.array([], dtype=np.int32) for _ in range(self.NUM_DRONES)]
         for i in range(1, self.NUM_DRONES + 1):
             if i > self.NUM_DRONES / 2:
                 # red
@@ -361,22 +362,33 @@ class BattleAviary(BaseMultiagentAviary):
 
         # Visualize the image
         # img = self._getDroneImages(1, False)
-        # import matplotlib.pyplot as plt
+        # import matplotlib.pyplot as pltk
         # plt.imshow(img, cmap='gray', vmin=0, vmax=255)
         # plt.pause(0.0001)
         # plt.show(block=False)
         import random
         for drone_index, gym_dict in action.items():
             if gym_dict["shoot_space"] == 1:
-                if random.random() > 0.95:
-                    self._drone_shoot(drone_index)
+                if random.random() > 0.5:
+                    self.drones_spheres[drone_index] = np.append(self.drones_spheres[drone_index], self._drone_shoot(drone_index))
+            try:
+                removable_spheres = np.array([], dtype=np.int32)
+                for sphere in self.drones_spheres[drone_index]:
+                    if(p.getBasePositionAndOrientation(sphere)[0][2] < 1.1):
+                        p.removeBody(sphere)
+                        removable_spheres = np.append(removable_spheres, sphere)
+                self.drones_spheres[drone_index] = np.setdiff1d(self.drones_spheres[drone_index], removable_spheres)
+            except:
+                pass
+            
+                    
         return super().step(action)
 
     def _drone_shoot(self, drone_index):
         import pybullet as p
         rot_mat = np.array(p.getMatrixFromQuaternion(self.quat[drone_index, :])).reshape(3, 3)
         #### Set target point, camera view and projection matrices #
-        target = np.dot(rot_mat, np.array([1000, 0, 0])) + np.array(self.pos[drone_index, :])
+        target = np.dot(rot_mat, np.array([100, 0, 0])) + np.array(self.pos[drone_index, :])
         # fix drone index, 0 is the floor
         drone_index += 1
 
@@ -396,12 +408,9 @@ class BattleAviary(BaseMultiagentAviary):
                           )
         # liner_and_angular_velocity = p.getBaseVelocity(drone_index, physicsClientId=self.CLIENT)
         # projectivle are black
-        euler = p.getEulerFromQuaternion(pos_and_orientation[1])
-        print("####################################")
-        print(euler)
-        print("#############################")
         p.changeVisualShape(temp, -1, rgbaColor=[0, 0, 0, 1], physicsClientId=self.CLIENT)
-        p.resetBaseVelocity(temp, euler*50*20, [0, 0, 0], physicsClientId=self.CLIENT)
+        p.resetBaseVelocity(temp, target, [0, 0, 0], physicsClientId=self.CLIENT)
+        return temp
 
     ################################################################################
     def _computeReward(self):
@@ -417,13 +426,16 @@ class BattleAviary(BaseMultiagentAviary):
         states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
         # rewards[1] = -1 * np.linalg.norm(np.array([states[1, 0], states[1, 1], 0.5]) - states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
 
+        for i in range(self.NUM_DRONES):
+            rewards[i] = 0
         for i in range(0, self.NUM_DRONES):
-            sphere_dist = np.linalg.norm(np.array([states[i, 0], states[i, 1], states[i, 2]]) - SPHERE_POS) ** 2
-            if self.last_drones_dist[i] > sphere_dist and self.last_drones_dist[i] - sphere_dist > 0.2:
-                self.last_drones_dist[i] = sphere_dist
-                rewards[i] = 0.1
-            else:
-                rewards[i] = -0.02
+            # If on the floor.
+            if states[i][2] < 2:
+                rewards[i] -= 10
+                # Any other drone gets reward. (should be once not always, should consider teams).
+                for j in range(self.NUM_DRONES):
+                    if j != i:
+                        rewards[j] += 1
         return rewards
 
     ################################################################################
@@ -441,7 +453,7 @@ class BattleAviary(BaseMultiagentAviary):
 
         done = {i: False for i in range(self.NUM_DRONES)}
         done["__all__"] = False
-        if self.step_counter > 100000:
+        if self.step_counter > 1000:
             done[0] = True
             done[1] = True
             done["__all__"] = True

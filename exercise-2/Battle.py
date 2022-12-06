@@ -58,11 +58,7 @@ if __name__ == "__main__":
     ARGS = parser.parse_args()
 
     #### Save directory ########################################
-    filename = os.path.dirname(os.path.abspath(__file__)) + '/results/save' + '-' + str(
-        ARGS.num_drones) + '-' + ARGS.algo + '-' + ARGS.obs.value + '-' + ARGS.act.value + '-' + datetime.now().strftime(
-        "%m.%d.%Y_%H.%M.%S")
-    if not os.path.exists(filename):
-        os.makedirs(filename + '/')
+    
 
     #### Print out current git commit hash #####################
     #if platform == "linux" or platform == "darwin":
@@ -150,13 +146,17 @@ if __name__ == "__main__":
         }
     }
     stop = {
-        "timesteps_total": 1000,  # 100000 ~= 10'
+        "timesteps_total": 100000,  # 100000 ~= 10'
         # "episode_reward_mean": 0,
         # "training_iteration": 100,
     }
 
     if not ARGS.exp:
 
+        filename = os.path.dirname(os.path.abspath(__file__)) + '/results/save' + '-' + str(
+        ARGS.num_drones) + '-' + ARGS.algo + '-' + ARGS.obs.value + '-' + ARGS.act.value + '-' + datetime.now().strftime("%m.%d.%Y_%H.%M.%S")
+        if not os.path.exists(filename):
+            os.makedirs(filename + '/')
         results = tune.run(
             "PPO",
             stop=stop,
@@ -182,14 +182,17 @@ if __name__ == "__main__":
         #print(checkpoints)
 
     else:
-
-        OBS = ObservationType.KIN if ARGS.exp.split("-")[4] == 'kin' else ObservationType.RGB
-        action_name = ARGS.exp.split("-")[5]
-        NUM_DRONES = int(ARGS.exp.split("-")[2])
+        filename = os.path.dirname(os.path.abspath(__file__)) + '/results/tryOfSave' + '-' + str(
+        ARGS.num_drones) + '-' + ARGS.algo + '-' + ARGS.obs.value + '-' + ARGS.act.value + '-' + datetime.now().strftime("%m.%d.%Y_%H.%M.%S")
+        if not os.path.exists(filename):
+            os.makedirs(filename + '/')
+        OBS = ObservationType.KIN if ARGS.exp.split("-")[3] == 'kin' else ObservationType.RGB
+        action_name = ARGS.exp.split("-")[4]
+        NUM_DRONES = int(ARGS.exp.split("-")[1])
         ACT = [action for action in ActionType if action.value == action_name][0]
         #### Restore agent #########################################
         agent = ppo.PPOTrainer(config=config)
-        with open(ARGS.exp + '/checkpoint.txt', 'r+') as f:
+        with open(ARGS.exp + 'checkpoint.txt', 'r+') as f:
             checkpoint = f.read()
         agent.restore(checkpoint)
         #print(checkpoint)
@@ -222,18 +225,17 @@ if __name__ == "__main__":
             action = {0: temp[0][0], 1: temp[1][0]}
             obs, reward, done, info = temp_env.step(action)
             temp_env.render()
-            if OBS == ObservationType.KIN:
-                for j in range(NUM_DRONES):
-                    logger.log(drone=j,
-                               timestamp=i / temp_env.SIM_FREQ,
-                               state=np.hstack([obs[j][0:3], np.zeros(4), obs[j][3:15], np.resize(action[j], (4))]),
-                               control=np.zeros(12)
-                               )
+            # if OBS == ObservationType.KIN:
+            #     for j in range(NUM_DRONES):
+            #         logger.log(drone=j,
+            #                    timestamp=i / temp_env.SIM_FREQ,
+            #                    state=np.hstack([obs[j][0:3], np.zeros(4), obs[j][3:15], np.resize(action[j], (4))])
+            #                    )
             sync(np.floor(i * temp_env.AGGR_PHY_STEPS), start, temp_env.TIMESTEP)
             # if done["__all__"]: obs = test_env.reset() # OPTIONAL EPISODE HALT
         temp_env.close()
-        logger.save_as_csv("ma")  # Optional CSV save
-        logger.plot()
+        #logger.save_as_csv("ma")  # Optional CSV save
+        #logger.plot()
 
     #### Shut down Ray #########################################
     ray.shutdown()
