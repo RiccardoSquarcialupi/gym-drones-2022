@@ -14,6 +14,11 @@ import pybullet as p
 
 SPHERE_POS = [0, 15, 1]
 
+RED_DRONE_TARGET = [0,0,0]
+
+BLUE_DRONE_TARGET= [0,0,0]
+
+CAMERA_VISION = [160, 120]
 
 class BattleAviary(BaseMultiagentAviary):
     """Multi-agent RL problem: leader-follower."""
@@ -79,7 +84,7 @@ class BattleAviary(BaseMultiagentAviary):
                          act=act
                          )
         self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
-        self.IMG_RES = np.array([640, 480])
+        self.IMG_RES = np.array(CAMERA_VISION)
         self.drones_sphere = [np.array([], dtype=np.int32) for _ in range(self.NUM_DRONES)]
         if not p.isNumpyEnabled():
             logging.warning("Numpy speed-up camera, try to activate it!")
@@ -360,33 +365,78 @@ class BattleAviary(BaseMultiagentAviary):
         return rgb
 
     def step(self, action):
+        global RED_DRONE_TARGET
+        global BLUE_DRONE_TARGET
+        shoot_red_enable = False
+        shoot_blue_enable = False
         import cv2
         # Visualize the image
-        img = self._getDroneImages(1, False)
-        bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-        blue_upper = np.array([180, 255, 255])
-        blue_lower = np.array([60, 35, 140])
+        img_red = self._getDroneImages(1, False)
+        bgr_red = cv2.cvtColor(img_red, cv2.COLOR_BGRA2BGR)
+        hsv_red = cv2.cvtColor(bgr_red, cv2.COLOR_BGR2HSV)
         red_lower = np.array([0, 100, 100])
         red_upper = np.array([10, 255, 255])
-        mask_blue = cv2.inRange(hsv, blue_lower, blue_upper)
-        mask_red = cv2.inRange(hsv, red_lower, red_upper)
-        result = cv2.bitwise_and(img, img, mask=mask_red)
-        cv2.imshow('image', result)
-        cv2.imshow('mask', mask_red)
+        mask_red = cv2.inRange(hsv_red, red_lower, red_upper)
+        result_red = cv2.bitwise_and(img_red, img_red, mask=mask_red)
+        #cv2.imshow('image_drone_red', result_red)
+        #cv2.imshow('mask_drone_red', mask_red)
+         
+        img_blue = self._getDroneImages(0, False)
+        bgr_blue = cv2.cvtColor(img_blue, cv2.COLOR_BGRA2BGR)
+        hsv_blue = cv2.cvtColor(bgr_blue, cv2.COLOR_BGR2HSV)
+        blue_upper = np.array([180, 255, 255])
+        blue_lower = np.array([60, 35, 140])
+        mask_blue = cv2.inRange(hsv_blue, blue_lower, blue_upper)
+        result_blue = cv2.bitwise_and(img_blue, img_blue, mask=mask_blue)
+        #cv2.imshow('image_drone_blue', result_blue)
+        #cv2.imshow('mask_drone_blue', mask_blue)
+
         cv2.waitKey(10)
         #print("IMG: " + str(img.shape))
         #print("FILTER: " + str(filter.shape))
         #print(filter)
         #print(filter)
         import matplotlib.pyplot as plt
-        plt.imshow(img, cmap='gray', vmin=0, vmax=255)
+        plt.imshow(img_red, cmap='gray', vmin=0, vmax=255)
         plt.pause(0.0001)
         plt.show(block=False)
+        # plt.imshow(img_blue, cmap='gray', vmin=0, vmax=255)
+        # plt.pause(0.0001)
+        # plt.show(block=False)
+
+        #check if the red drone is in the image
+        mask = mask_red
+
+        if mask.any() != 0:
+            for i in range(0, CAMERA_VISION[1]):
+                for j in range(0, CAMERA_VISION[0]):
+                    if mask[i, j] != 0:
+                        RED_DRONE_TARGET = np.array([100, j-(CAMERA_VISION[0]/2), i-(CAMERA_VISION[1]/2)])
+                        break
+                if RED_DRONE_TARGET[0] == 100:
+                    shoot_red_enable = True
+                    break 
+    
+        mask = mask_blue
+        #check if the blue drone is in the image
+        if mask.any() != 0:
+            for i in range(0, CAMERA_VISION[1]):
+                for j in range(0, CAMERA_VISION[0]):
+                    if mask[i, j] != 0:
+                        BLUE_DRONE_TARGET = np.array([100, j-(CAMERA_VISION[0]/2), i-(CAMERA_VISION[1]/2)])
+                        break
+                if BLUE_DRONE_TARGET[0] == 100:
+                    shoot_blue_enable = True
+                    break
+
         import random
         for drone_index, gym_dict in action.items():
             if gym_dict["shoot_space"] == 1:
-                if random.random() > 0.95:
+                if shoot_red_enable and drone_index == 1:
+                    print("sono il drone blue e sto sparando")
+                    self.drones_spheres[drone_index] = np.append(self.drones_spheres[drone_index], self._drone_shoot(drone_index))
+                if shoot_blue_enable and drone_index == 0:
+                    print("sono il drone rosso e sto sparando")
                     self.drones_spheres[drone_index] = np.append(self.drones_spheres[drone_index], self._drone_shoot(drone_index))
             try:
                 removable_spheres = np.array([], dtype=np.int32)
@@ -398,17 +448,20 @@ class BattleAviary(BaseMultiagentAviary):
             except:
                 pass
             
-                    
+        RED_DRONE_TARGET=[0,0,0]
+        BLUE_DRONE_TARGET=[0,0,0]
         return super().step(action)
 
     def _drone_shoot(self, drone_index):
+        global RED_DRONE_TARGET, BLUE_DRONE_TARGET
         import pybullet as p
+        shoot_target = (BLUE_DRONE_TARGET if drone_index == 0 else RED_DRONE_TARGET)
+        print("shoot_target", shoot_target)
         rot_mat = np.array(p.getMatrixFromQuaternion(self.quat[drone_index, :])).reshape(3, 3)
         #### Set target point, camera view and projection matrices #
-        target = np.dot(rot_mat, np.array([100, 0, 0])) + np.array(self.pos[drone_index, :])
+        target = np.dot(rot_mat, shoot_target) + np.array(self.pos[drone_index, :])
         # fix drone index, 0 is the floor
         drone_index += 1
-
         #print(target)
         pos_and_orientation = p.getBasePositionAndOrientation(drone_index)
         # print("#############################################################################")
