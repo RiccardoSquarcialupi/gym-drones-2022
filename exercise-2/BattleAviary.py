@@ -373,7 +373,7 @@ class BattleAviary(BaseMultiagentAviary):
         mask_red = cv2.inRange(hsv, red_lower, red_upper)
         result = cv2.bitwise_and(img, img, mask=mask_red)
         cv2.imshow('image', result)
-        cv2.imshow('mask', mask)
+        cv2.imshow('mask', mask_red)
         cv2.waitKey(10)
         #print("IMG: " + str(img.shape))
         #print("FILTER: " + str(filter.shape))
