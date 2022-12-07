@@ -362,13 +362,16 @@ class BattleAviary(BaseMultiagentAviary):
     def step(self, action):
         import cv2
         # Visualize the image
-        img = self._getDroneImages(0, False)
+        img = self._getDroneImages(1, False)
         bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-        black_upper = np.array([180, 255, 255])
-        black_lower = np.array([60, 35, 140])
-        mask = cv2.inRange(hsv, black_lower, black_upper)
-        result = cv2.bitwise_and(img, img, mask=mask)
+        blue_upper = np.array([180, 255, 255])
+        blue_lower = np.array([60, 35, 140])
+        red_lower = np.array([0, 100, 100])
+        red_upper = np.array([10, 255, 255])
+        mask_blue = cv2.inRange(hsv, blue_lower, blue_upper)
+        mask_red = cv2.inRange(hsv, red_lower, red_upper)
+        result = cv2.bitwise_and(img, img, mask=mask_red)
         cv2.imshow('image', result)
         cv2.imshow('mask', mask)
         cv2.waitKey(10)
