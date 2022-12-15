@@ -1,0 +1,21 @@
+
+#create env
+	conda create -n <name> python=3.7 opencv
+#activate env
+	conda activate <name> 
+	pip install poetry tensorflow tensorflow-probability
+#build the project
+	./build_project.sh
+#install require lib, wait for conda to install everything(5/10 min required)
+	conda install -c conda-forge libgcc
+#conda install -c conda-forge ray-rllib numpy pytorch pybullet
+#upgrade some lib
+	pip install --upgrade numpy scipy Pillow matplotlib cycler gym pybullet torch 'ray[rllib]' stable-baselines3 tensorboard
+#if this error appear:
+#file "GLIBCXX_3.4.29 not found inside /usr/lib/x86_64 etc..., 
+#the file libstdc++ of our linux distribution it's not update
+#we install the library that contain this file inside conda and export his /lib folder to LD_LIBRARY_PATH to bypass this problem 
+#note : is temporary, if you close the terminal you need to re-export the path, TODO EACH TIME
+	export LD_LIBRARY_PATH=/home/SVSstudents<number>/anaconda3/lib
+#double check the python version with python --version -> 3.7.15 raccomanded
+	
