@@ -23,7 +23,6 @@ CAMERA_VISION = [160, 80]
 # number of spheres in each drone that can be shooted.
 NUM_SPHERES = np.array([5,5,5,5,5,5,5,5])
 
-
 class BattleAviary(BaseMultiagentAviary):
     """Multi-agent RL problem: leader-follower."""
 
@@ -89,6 +88,8 @@ class BattleAviary(BaseMultiagentAviary):
                          )
         self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
         self.IMG_RES = np.array(CAMERA_VISION)
+        # maximum duration of a single episode in step.
+        self.max_steps = 240 * 30
         # array of flying spheres for each drone, stored to be deleted when touching the ground.
         self.drones_sphere = [np.array([], dtype=np.int32) for _ in range(self.NUM_DRONES)]
         if not p.isNumpyEnabled():
@@ -607,7 +608,7 @@ class BattleAviary(BaseMultiagentAviary):
             elif NUM_SPHERES[i] == -1: # Shooting a sphere when they are ended.
                 NUM_SPHERES[i] = 0
                 rewards[i] = -0.5
-            elif self.step_counter <= 100 and array_target[i][4]: # sparo nei primi 3 secondi, da rivedere in base alla frequenza
+            elif self.step_counter <= 240*3 and array_target[i][4]: # sparo nei primi 3 secondi.
                 rewards[i] = -1
             elif array_target[i][3] and array_target[i][4]:  # vedo e sparo
                 if states[(i + 1) % 2, 2] < 0.5:  # ho atterrato
@@ -634,7 +635,7 @@ class BattleAviary(BaseMultiagentAviary):
             one additional boolean value for key "__all__".
 
         """
-        done = {i: self.step_counter>500 for i in range(self.NUM_DRONES)}
+        done = {i: self.step_counter>self.max_steps for i in range(self.NUM_DRONES)}
         done["__all__"] = False
 
         #if self.step_counter == 300:
@@ -645,7 +646,7 @@ class BattleAviary(BaseMultiagentAviary):
             if states[i, 2] < 0.3:  # if drone is on the ground
                 done[1] = True
                 done["__all__"] = True
-        if self.step_counter > 500:
+        if self.step_counter > self.max_steps:
             done[1] = True
             done["__all__"] = True
         return done
@@ -654,9 +655,9 @@ class BattleAviary(BaseMultiagentAviary):
 
     def _observationSpace(self):
         low_0 = [0] * CAMERA_VISION[0] * CAMERA_VISION[1] * 4
-        low = np.array([-1, -1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1] + low_0 + [-1])
+        low = np.array([-1, -1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1] + low_0 + [-1] + [0])
         high_1 = [1] * CAMERA_VISION[0] * CAMERA_VISION[1] * 4
-        high = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] + high_1 + [5])
+        high = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] + high_1 + [5] + [1])
         return spaces.Dict({i: spaces.Box(low=low,
                                           high=high,
                                           dtype=np.float64
@@ -671,7 +672,8 @@ class BattleAviary(BaseMultiagentAviary):
                 (
                     obs[i],
                     np.array(self._getDroneImages(i, False) / 255, dtype=np.float64).flat, # concatenate image matrix
-                    [NUM_SPHERES[i]] # and spheres num
+                    [NUM_SPHERES[i]], # and spheres num
+                    [self.step_counter / self.max_steps] # and step counter for time passed from the beginning.
                 )
             ) 
                                                       
