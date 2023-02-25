@@ -13,12 +13,15 @@ from gym_pybullet_drones.envs.multi_agent_rl.BaseMultiagentAviary import BaseMul
 from gym_pybullet_drones.utils.utils import nnlsRPM
 import pybullet as p
 
-SPHERE_POS = [0, 15, 1]
-
+# x y z of each drone, concatenated with 2 booleans indicating whether the drone can see an enemy and if he is shooting.
 BLUE_ARRAY_TARGET = np.array([[0, 0, 0, False, False],[0, 0, 0, False, False],[0, 0, 0, False, False],[0, 0, 0, False, False]])
 RED_ARRAY_TARGET = np.array([[0, 0, 0, False, False],[0, 0, 0, False, False],[0, 0, 0, False, False],[0, 0, 0, False, False]])
 
+# resolution of virtual camera of each drone.
 CAMERA_VISION = [160, 80]
+
+# number of spheres in each drone that can be shooted.
+NUM_SPHERES = np.array([5,5,5,5,5,5,5,5])
 
 
 class BattleAviary(BaseMultiagentAviary):
@@ -86,6 +89,7 @@ class BattleAviary(BaseMultiagentAviary):
                          )
         self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
         self.IMG_RES = np.array(CAMERA_VISION)
+        # array of flying spheres for each drone, stored to be deleted when touching the ground.
         self.drones_sphere = [np.array([], dtype=np.int32) for _ in range(self.NUM_DRONES)]
         if not p.isNumpyEnabled():
             logging.warning("Numpy speed-up camera, try to activate it!")
@@ -107,10 +111,15 @@ class BattleAviary(BaseMultiagentAviary):
 
         import os
         import pybullet as p
+        global NUM_SPHERES
         # disable shadows for better images
         p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
         # add hangar urdf
         self.drones_spheres = [np.array([], dtype=np.int32) for _ in range(self.NUM_DRONES)]
+        # reset number of spheres in each drone.
+        for i in range(self.NUM_DRONES):
+            NUM_SPHERES[i] = 5
+        # assigning each drone to a team.
         for i in range(1, self.NUM_DRONES + 1):
             if i > self.NUM_DRONES / 2:
                 # red team
@@ -120,6 +129,7 @@ class BattleAviary(BaseMultiagentAviary):
                 color = [0, 0, 1, 1]
             p.changeVisualShape(i, -1, rgbaColor=color, physicsClientId=self.CLIENT)
 
+        # disambiguation: in this way it works both called from exercise-2 folder and father folder.
         if os.path.exists('exercise-2/Hangar/hangar.urdf'):
             p.loadURDF(
                 "exercise-2/Hangar/hangar.urdf",
@@ -366,6 +376,7 @@ class BattleAviary(BaseMultiagentAviary):
 
         return rgb
 
+    # compute image for each drone, setting target array.
     def setupForStep(self,drones):
         if drones in [4,5,6,7]:
             img_red = self._getDroneImages(drones, False)
@@ -413,6 +424,7 @@ class BattleAviary(BaseMultiagentAviary):
     def step(self, action):
         global RED_ARRAY_TARGET
         global BLUE_ARRAY_TARGET
+        global NUM_SPHERES
 
         RED_ARRAY_TARGET[:,3] = False
         BLUE_ARRAY_TARGET[:,3] = False
@@ -451,15 +463,25 @@ class BattleAviary(BaseMultiagentAviary):
         BLUE_ARRAY_TARGET[:,4] = False
 
         for drone_index, gym_dict in action.items():
+            # if drones want to shoot
             if gym_dict["shoot_space"] == 1:
-                if RED_ARRAY_TARGET[drone_index%4,3] and drone_index in [4,5,6,7]:
+                # if drone is red team and can shoot.
+                if RED_ARRAY_TARGET[drone_index%4,3] and drone_index in [4,5,6,7] and NUM_SPHERES[drone_index] > 0:
                     RED_ARRAY_TARGET[drone_index%4,4] = True
                     self.drones_spheres[drone_index] = np.append(self.drones_spheres[drone_index],
                                                                  self._drone_shoot(drone_index))
-                if BLUE_ARRAY_TARGET[drone_index%4,3] and drone_index in [0,1,2,3]:
+                # if drone is blue team and can shoot.
+                if BLUE_ARRAY_TARGET[drone_index%4,3] and drone_index in [0,1,2,3] and NUM_SPHERES[drone_index] > 0:
                     BLUE_ARRAY_TARGET[drone_index%4,4] = True
                     self.drones_spheres[drone_index] = np.append(self.drones_spheres[drone_index],
                                                                  self._drone_shoot(drone_index))
+
+            if gym_dict["shoot_space"] == 1 and NUM_SPHERES[drone_index] == 0:
+                # Spheres to shoot are over, set it to -1, so we can negative reward the drone for shooting.
+                NUM_SPHERES[drone_index] = -1
+
+            # each flying sphere currently touching the ground is removed
+            # nice performance improvement.
             try:
                 removable_spheres = np.array([], dtype=np.int32)
                 for sphere in self.drones_spheres[drone_index]:
@@ -470,10 +492,12 @@ class BattleAviary(BaseMultiagentAviary):
             except:
                 pass
 
+        # reset want to shoot
         RED_ARRAY_TARGET[:,0:3] = 0
         BLUE_ARRAY_TARGET[:,0:3] = 0
         return super().step(action)
 
+    # convert a 2D point in camera to world 3D coordinates.
     def from2Dto3D(self, array_target):
         f_x = 1000.
         f_y = 1000.
@@ -518,7 +542,11 @@ class BattleAviary(BaseMultiagentAviary):
     def _drone_shoot(self, drone_index):
         import pybullet as p
         global RED_ARRAY_TARGET
-        global BLUE_ARRAY_TARGET
+        global BLUE_ARRAY_TARGET 
+        global NUM_SPHERES
+
+        NUM_SPHERES[drone_index] -= 1
+
         shoot_target = (
             self.from2Dto3D(BLUE_ARRAY_TARGET[drone_index,0:3]) 
             if drone_index in [0,1,2,3] else
@@ -553,6 +581,7 @@ class BattleAviary(BaseMultiagentAviary):
     def _computeReward(self):
         global BLUE_ARRAY_TARGET
         global RED_ARRAY_TARGET
+        global NUM_SPHERES
 
         array_target = np.concatenate((BLUE_ARRAY_TARGET, RED_ARRAY_TARGET), axis=0)
         # print("############################")
@@ -575,6 +604,9 @@ class BattleAviary(BaseMultiagentAviary):
             if states[i, 2] < 0.5:  # sono stato atterrato
                 rewards[i] = -1
                 #if self.step_counter/self.SIM_FREQ < 3
+            elif NUM_SPHERES[i] == -1: # Shooting a sphere when they are ended.
+                NUM_SPHERES[i] = 0
+                rewards[i] = -0.5
             elif self.step_counter <= 100 and array_target[i][4]: # sparo nei primi 3 secondi, da rivedere in base alla frequenza
                 rewards[i] = -1
             elif array_target[i][3] and array_target[i][4]:  # vedo e sparo
@@ -622,20 +654,27 @@ class BattleAviary(BaseMultiagentAviary):
 
     def _observationSpace(self):
         low_0 = [0] * CAMERA_VISION[0] * CAMERA_VISION[1] * 4
-        low = np.array([-1, -1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1] + low_0)
+        low = np.array([-1, -1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1] + low_0 + [-1])
         high_1 = [1] * CAMERA_VISION[0] * CAMERA_VISION[1] * 4
-        high = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] + high_1)
+        high = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] + high_1 + [5])
         return spaces.Dict({i: spaces.Box(low=low,
                                           high=high,
                                           dtype=np.float64
                                           ) for i in range(self.NUM_DRONES)})
 
     def _computeObs(self):
+        global NUM_SPHERES
         obs = super()._computeObs()
         for i in obs.keys():
             # print(self._getDroneImages(i, False).flatten)
-            obs[i] = np.concatenate((obs[i], np.array(self._getDroneImages(i, False) / 255,
-                                                      dtype=np.float64).flat))  # concatenate image matrix
+            obs[i] = np.concatenate(
+                (
+                    obs[i],
+                    np.array(self._getDroneImages(i, False) / 255, dtype=np.float64).flat, # concatenate image matrix
+                    [NUM_SPHERES[i]] # and spheres num
+                )
+            ) 
+                                                      
         return obs
 
     def _computeInfo(self):

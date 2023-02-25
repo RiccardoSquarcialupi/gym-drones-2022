@@ -150,7 +150,7 @@ if __name__ == "__main__":
         }
     }
     stop = {
-        "timesteps_total": 5000,  # 100000 ~= 10'
+        "timesteps_total": 4000,  # 100000 ~= 10'
         # "episode_reward_mean": 0,
         # "training_iteration": 100,
     }
