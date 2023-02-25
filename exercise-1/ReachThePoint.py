@@ -20,6 +20,8 @@ import sys
 from sys import platform
 import subprocess
 import pdb
+import sys
+sys.path.append('../')
 import math
 import numpy as np
 import pybullet as p
@@ -37,10 +39,10 @@ from ray import tune
 from ray.tune.logger import DEFAULT_LOGGERS
 from ray.tune import register_env, CLIReporter
 from ray.rllib.agents import ppo
-from ray.rllib.agents.ppo import PPOTrainer, PPOTFPolicy
+from ray.rllib.agents.ppo import PPOTrainer
 from ray.rllib.examples.policy.random_policy import RandomPolicy
 from ray.rllib.utils.test_utils import check_learning_achieved
-from ray.rllib.agents.callbacks import DefaultCallbacks
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models import ModelCatalog
 from ray.rllib.policy.sample_batch import SampleBatch
