@@ -41,7 +41,7 @@ if __name__ == "__main__":
 
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Multi-agent reinforcement learning experiments script')
-    parser.add_argument('--num_drones', default=2, type=int, help='Number of drones (default: 2)', metavar='')
+    parser.add_argument('--num_drones', default=8, type=int, help='Number of drones (default: 8)', metavar='')
     parser.add_argument('--obs', default='kin', type=ObservationType, help='Observation space (default: kin)',
                         metavar='')
     parser.add_argument('--act', default='vel', type=ActionType, help='Action space (default: one_d_rpm)',
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         }
     }
     stop = {
-        "timesteps_total": 20000,  # 100000 ~= 10'
+        "timesteps_total": 5000,  # 100000 ~= 10'
         # "episode_reward_mean": 0,
         # "training_iteration": 100,
     }
