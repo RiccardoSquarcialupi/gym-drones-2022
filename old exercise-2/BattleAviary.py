@@ -14,20 +14,18 @@ from gym_pybullet_drones.utils.utils import nnlsRPM
 import pybullet as p
 
 # x y z of each drone, concatenated with 2 booleans indicating whether the drone can see an enemy and if he is shooting.
-#first 4 drones are blue, last 4 are red
-BLUE_ARRAY_TARGET = np.array([[0, 0, 0, False, False],[0, 0, 0, False, False]])
-RED_ARRAY_TARGET = np.array([[0, 0, 0, False, False],[0, 0, 0, False, False]])
+BLUE_ARRAY_TARGET = np.array([[0, 0, 0, False, False],[0, 0, 0, False, False],[0, 0, 0, False, False],[0, 0, 0, False, False]])
+RED_ARRAY_TARGET = np.array([[0, 0, 0, False, False],[0, 0, 0, False, False],[0, 0, 0, False, False],[0, 0, 0, False, False]])
 
-TIME_OF_SIM = 12
 # resolution of virtual camera of each drone.
-CAMERA_VISION = [100, 75]
+CAMERA_VISION = [160, 80]
 
 # number of spheres in each drone that can be shooted.
-NUM_SPHERES = np.array([5,5,5,5])
+NUM_SPHERES = np.array([5,5,5,5,5,5,5,5])
 
 class BattleAviary(BaseMultiagentAviary):
     """Multi-agent RL problem: leader-follower."""
-    global TIME_OF_SIM
+
     ################################################################################
 
     def __init__(self,
@@ -91,7 +89,7 @@ class BattleAviary(BaseMultiagentAviary):
         self.last_drones_dist = [1000000 for _ in range(self.NUM_DRONES)]
         self.IMG_RES = np.array(CAMERA_VISION)
         # maximum duration of a single episode in step.
-        self.max_steps = 240 * TIME_OF_SIM
+        self.max_steps = 240 * 30
         # array of flying spheres for each drone, stored to be deleted when touching the ground.
         self.drones_sphere = [np.array([], dtype=np.int32) for _ in range(self.NUM_DRONES)]
         if not p.isNumpyEnabled():
@@ -101,10 +99,6 @@ class BattleAviary(BaseMultiagentAviary):
     ################################################################################
 
     def reset(self):
-        global NUM_SPHERES
-        print("number of spheres before reset for each drone: ", NUM_SPHERES)
-        for i in range(self.NUM_DRONES):
-                NUM_SPHERES[i] = 5
         return super().reset()
 
     def _addObstacles(self):
@@ -351,22 +345,21 @@ class BattleAviary(BaseMultiagentAviary):
         ndarray
             (h, w, 4)-shaped array of uint8's containing the RBG(A) image captured from the n-th drone's POV.
         """
-        global CAMERA_VISION
         if self.IMG_RES is None:
             print("[ERROR] in BaseAviary._getDroneImages(), remember to set self.IMG_RES to np.array([width, height])")
             exit()
         rot_mat = np.array(p.getMatrixFromQuaternion(self.quat[nth_drone, :])).reshape(3, 3)
         #### Set target point, camera view and projection matrices #
-        target = np.dot(rot_mat, np.array([100, 0, 0])) + np.array(self.pos[nth_drone, :])
+        target = np.dot(rot_mat, np.array([1000, 0, 0])) + np.array(self.pos[nth_drone, :])
         DRONE_CAM_VIEW = p.computeViewMatrix(cameraEyePosition=self.pos[nth_drone, :] + np.array([0, 0, self.L]),
                                              cameraTargetPosition=target,
                                              cameraUpVector=[0, 0, 1],
                                              physicsClientId=self.CLIENT
                                              )
         DRONE_CAM_PRO = p.computeProjectionMatrixFOV(fov=45.0,
-                                                     aspect=1,
+                                                     aspect=1.0,
                                                      nearVal=self.L,
-                                                     farVal=100.0
+                                                     farVal=1000.0
                                                      )
         SEG_FLAG = p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX if segmentation else p.ER_NO_SEGMENTATION_MASK
         [w, h, rgb, _, _] = p.getCameraImage(width=self.IMG_RES[0],
@@ -383,56 +376,44 @@ class BattleAviary(BaseMultiagentAviary):
 
     # compute image for each drone, setting target array.
     def setupForStep(self,drones):
-        global RED_ARRAY_TARGET
-        global BLUE_ARRAY_TARGET
-        if drones in range(self.NUM_DRONES//2,self.NUM_DRONES):
-            #i'm red, seeking for blues drones in my camera
-            n = drones%(self.NUM_DRONES//2)
+        if drones in [4,5,6,7]:
             img_red = self._getDroneImages(drones, False)
             bgr_red = cv2.cvtColor(img_red, cv2.COLOR_BGRA2BGR)
             hsv_red = cv2.cvtColor(bgr_red, cv2.COLOR_BGR2HSV)
-            red_lower = np.array([0,50,20])
-            red_upper = np.array([5,255,255])
+            red_lower = np.array([0, 100, 100])
+            red_upper = np.array([10, 255, 255])
             mask_red = cv2.inRange(hsv_red, red_lower, red_upper)
+            result_red = cv2.bitwise_and(img_red, img_red, mask=mask_red)
             mask = mask_red
 
-            
             if mask.any() != 0:
-                if mask[0,0] == 0:
-                    for i in range(0, CAMERA_VISION[0]):
-                        for j in range(0, CAMERA_VISION[1]):
-                            if mask[j, i] != 0:
-                                RED_ARRAY_TARGET[n, 0:3] = np.array([100, (CAMERA_VISION[0] / 2)-i-2, (CAMERA_VISION[1] / 2)-j-2])
-                                break
-                        if RED_ARRAY_TARGET[n, 0] == 100:
-                            RED_ARRAY_TARGET[n, 3] = True
+                for i in range(0, CAMERA_VISION[1]):
+                    for j in range(0, CAMERA_VISION[0]):
+                        if mask[i, j] != 0:
+                            RED_ARRAY_TARGET[drones%4, 0:3] = np.array([100, j - (CAMERA_VISION[0] / 2), i - (CAMERA_VISION[1] / 2)])
                             break
-            
-
+                    if RED_ARRAY_TARGET[drones%4, 0] == 100:
+                        RED_ARRAY_TARGET[drones%4, 3] = True
+                        break
 
         else:
-            #i'm blue, seeking for reds drones in my camera
-        
-            n = drones%(self.NUM_DRONES//2)
             img_blue = self._getDroneImages(drones, False)
             bgr_blue = cv2.cvtColor(img_blue, cv2.COLOR_BGRA2BGR)
             hsv_blue = cv2.cvtColor(bgr_blue, cv2.COLOR_BGR2HSV)
-            blue_upper = np.array([128, 255, 255])
-            blue_lower = np.array([90, 50, 70])
+            blue_upper = np.array([180, 255, 255])
+            blue_lower = np.array([60, 35, 140])
             mask_blue = cv2.inRange(hsv_blue, blue_lower, blue_upper)
             mask = mask_blue
             
-            
             if mask.any() != 0:
-                if mask[0,0] == 0:
-                    for i in range(0, CAMERA_VISION[0]):
-                        for j in range(0, CAMERA_VISION[1]):
-                            if mask[j, i] != 0:
-                                BLUE_ARRAY_TARGET[n, 0:3] = np.array([100,(CAMERA_VISION[0] / 2)-i-2,  (CAMERA_VISION[1] / 2)-j-2])
-                                break
-                        if BLUE_ARRAY_TARGET[n, 0] == 100:
-                            BLUE_ARRAY_TARGET[n, 3] = True
+                for i in range(0, CAMERA_VISION[1]):
+                    for j in range(0, CAMERA_VISION[0]):
+                        if mask[i, j] != 0:
+                            BLUE_ARRAY_TARGET[drones, 0:3] = np.array([100, j - (CAMERA_VISION[0] / 2), i - (CAMERA_VISION[1] / 2)])
                             break
+                    if BLUE_ARRAY_TARGET[drones, 0] == 100:
+                        BLUE_ARRAY_TARGET[drones, 3] = True
+                        break
 
             
 
@@ -442,16 +423,22 @@ class BattleAviary(BaseMultiagentAviary):
         global RED_ARRAY_TARGET
         global BLUE_ARRAY_TARGET
         global NUM_SPHERES
-    
 
         RED_ARRAY_TARGET[:,3] = False
         BLUE_ARRAY_TARGET[:,3] = False
 
         
+        # Visualize the image
         for i in range(0, self.NUM_DRONES):
-            self.setupForStep(i)  
+            self.setupForStep(i)
+        # cv2.imshow('image_drone_red', result_red)
+        # cv2.imshow('mask_drone_red', mask_red)
 
-        #VISUALIZE DRONE CAMERA
+        
+        #result_blue = cv2.bitwise_and(img_blue, img_blue, mask=mask_blue)
+        # cv2.imshow('image_drone_blue', result_blue)
+        # cv2.imshow('mask_drone_blue', mask_blue)
+
         #cv2.waitKey(10)
         # print("IMG: " + str(img.shape))
         # print("FILTER: " + str(filter.shape))
@@ -473,22 +460,19 @@ class BattleAviary(BaseMultiagentAviary):
         RED_ARRAY_TARGET[:,4] = False
         BLUE_ARRAY_TARGET[:,4] = False
 
-
         for drone_index, gym_dict in action.items():
             # if drones want to shoot
             if gym_dict["shoot_space"] == 1:
-                # if i'm red set RED_ARRAY_TARGET
-                if(drone_index>=self.NUM_DRONES//2):
-                    if RED_ARRAY_TARGET[drone_index%(self.NUM_DRONES//2),3] and NUM_SPHERES[drone_index] > 0:
-                        RED_ARRAY_TARGET[drone_index%(self.NUM_DRONES//2),4] = True
-                        self.drones_spheres[drone_index] = np.append(self.drones_spheres[drone_index],
-                                                                    self._drone_shoot(drone_index))
-                else:
-                    # if i'm blu set BLUE_ARRAY_TARGET
-                    if BLUE_ARRAY_TARGET[drone_index%(self.NUM_DRONES//2),3] and NUM_SPHERES[drone_index] > 0:
-                        BLUE_ARRAY_TARGET[drone_index%(self.NUM_DRONES//2),4] = True
-                        self.drones_spheres[drone_index] = np.append(self.drones_spheres[drone_index],
-                                                                    self._drone_shoot(drone_index))
+                # if drone is red team and can shoot.
+                if RED_ARRAY_TARGET[drone_index%4,3] and drone_index in [4,5,6,7] and NUM_SPHERES[drone_index] > 0:
+                    RED_ARRAY_TARGET[drone_index%4,4] = True
+                    self.drones_spheres[drone_index] = np.append(self.drones_spheres[drone_index],
+                                                                 self._drone_shoot(drone_index))
+                # if drone is blue team and can shoot.
+                if BLUE_ARRAY_TARGET[drone_index%4,3] and drone_index in [0,1,2,3] and NUM_SPHERES[drone_index] > 0:
+                    BLUE_ARRAY_TARGET[drone_index%4,4] = True
+                    self.drones_spheres[drone_index] = np.append(self.drones_spheres[drone_index],
+                                                                 self._drone_shoot(drone_index))
 
             if gym_dict["shoot_space"] == 1 and NUM_SPHERES[drone_index] == 0:
                 # Spheres to shoot are over, set it to -1, so we can negative reward the drone for shooting.
@@ -511,47 +495,47 @@ class BattleAviary(BaseMultiagentAviary):
         BLUE_ARRAY_TARGET[:,0:3] = 0
         return super().step(action)
 
-    # convert a 2D point in camera to world 3D coordinates. NOT WORKING ACCURATELY
+    # convert a 2D point in camera to world 3D coordinates.
     def from2Dto3D(self, array_target):
-
-        global CAMERA_VISION
-        proj_matrix = p.computeProjectionMatrixFOV(fov=45.0,
-                                                     aspect=1,
-                                                     nearVal=self.L,
-                                                     farVal=100.0
-                                                     )
-        
-       
-        proj_matrix = np.matrix(proj_matrix).reshape(4,4)
-        
-        # Extract intrinsic matrix
-        intrinsic_matrix = np.zeros((3, 3))
-        intrinsic_matrix[:3, :3] = np.transpose(proj_matrix[:3, :3])
-        intrinsic_matrix[2,:2]/=intrinsic_matrix[2,2]
-        intrinsic_matrix[2,2] = 1
-        
-
+        f_x = 1000.
+        f_y = 1000.
+        c_x = 1000.
+        c_y = 1000.
         Z = array_target[0]
         Z = [Z]
         x = array_target[1]
         y = array_target[2]
-        
+        intrinsic = np.array([
+            [f_x, 0.0, c_x],
+            [0.0, f_y, c_y],
+            [0.0, 0.0, 1.0]
+        ])
 
         distortion = np.array([0.0, 0.0, 0.0, 0.0])
 
-        
+        f_x = intrinsic[0, 0]
+        f_y = intrinsic[1, 1]
+        c_x = intrinsic[0, 2]
+        c_y = intrinsic[1, 2]
+        # This was an error before
+        # c_x = intrinsic[0, 3]
+        # c_y = intrinsic[1, 3]
+
         # Step 1. Undistort.
         points_undistorted = np.array([])
 
-        points_undistorted = cv2.undistortPoints(np.expand_dims(np.array([x, y]).astype(np.float32), axis=1), intrinsic_matrix,
-                                                 distortion, P=intrinsic_matrix)
+        points_undistorted = cv2.undistortPoints(np.expand_dims(np.array([x, y]).astype(np.float32), axis=1), intrinsic,
+                                                 distortion, P=intrinsic)
         points_undistorted = np.squeeze(points_undistorted, axis=1)
 
         # Step 2. Reproject.
-        z = Z[0]
-        x = (points_undistorted[0, 0]) / intrinsic_matrix[0,0] * z/100
-        y = (points_undistorted[0, 1]) / intrinsic_matrix[1,1] * z/100
-        return [50,x,y]
+        result = []
+        for idx in range(points_undistorted.shape[0]):
+            z = Z[0] if len(Z) == 1 else Z[idx]
+            x = (points_undistorted[idx, 0] - c_x) / f_x * z
+            y = (points_undistorted[idx, 1] - c_y) / f_y * z
+            result.append([x, y, z])
+        return result[0]
 
     def _drone_shoot(self, drone_index):
         import pybullet as p
@@ -559,72 +543,37 @@ class BattleAviary(BaseMultiagentAviary):
         global BLUE_ARRAY_TARGET 
         global NUM_SPHERES
 
-        if self.step_counter >= self.SIM_FREQ*3 :# no shooting before 3 seconds
-            NUM_SPHERES[drone_index] -= 1
-            
-            # shoot_target = (
-            #     self.from2Dto3D(BLUE_ARRAY_TARGET[drone_index,0:3]) 
-            #     if drone_index in [0,1,2,3] else
-            #     self.from2Dto3D(RED_ARRAY_TARGET[drone_index%4,0:3]))
+        NUM_SPHERES[drone_index] -= 1
 
-            # shoot_target = (self.from2Dto3D(BLUE_ARRAY_TARGET[drone_index%(self.NUM_DRONES//2),0:3])
-            #     if drone_index in range(self.NUM_DRONES//2) else
-            #     self.from2Dto3D(RED_ARRAY_TARGET[drone_index%(self.NUM_DRONES//2),0:3]))
-            
-            #trying to fix the shooting direction
-            # if drone_index in range(self.NUM_DRONES//2):
-            #     if abs(drone_yaw) < 90:
-            #         BLUE_ARRAY_TARGET[drone_index,1] += (90 - abs(drone_yaw))/2
-            #     else :
-            #         BLUE_ARRAY_TARGET[drone_index,1] += (abs(drone_yaw) - 90)/2
-
-            #     if drone_pitch != 0:
-            #         BLUE_ARRAY_TARGET[drone_index,2] -= drone_pitch
-            # else:
-            #     if abs(drone_yaw) < 90:
-            #         RED_ARRAY_TARGET[drone_index%(self.NUM_DRONES//2),1] += (90 - abs(drone_yaw))/2
-            #     else :
-            #         RED_ARRAY_TARGET[drone_index%(self.NUM_DRONES//2),1] += (abs(drone_yaw) - 90)/2
-
-            #     if drone_pitch != 0:
-            #         RED_ARRAY_TARGET[drone_index%(self.NUM_DRONES//2),2] -= drone_pitch
-
-            
-            shoot_target = (BLUE_ARRAY_TARGET[drone_index,0:3]
-                if drone_index in range(self.NUM_DRONES//2) else
-                RED_ARRAY_TARGET[drone_index%(self.NUM_DRONES//2),0:3])
-
-            #print("TARGET of drone",drone_index," - ",shoot_target)
-            
-            # print("shoot_target", shoot_target)
-                                                
-            rot_mat = np.array(p.getMatrixFromQuaternion(self.quat[drone_index, :])).reshape(3, 3)
-        
-            #### Set target point, camera view and projection matrices #
-            target = np.dot(rot_mat, shoot_target) + np.array(self.pos[drone_index, :])
-            # print("COMPUTE TARGET of drone",drone_index," - ",target)
-            # fix drone index, 0 is the floor
-            drone_index += 1
-            # print(target)
-            pos_and_orientation = p.getBasePositionAndOrientation(drone_index)
-            # print("#############################################################################")
-            # print("pos_and_orientation", pos_and_orientation)
-            # print("#############################################################################")
-            pos = np.array(pos_and_orientation[0]) + 0.2
-            #print(pos)
-            temp = p.loadURDF("sphere_small.urdf",
-                            pos,
-                            p.getQuaternionFromEuler([0, 0, 0]),
-                            physicsClientId=self.CLIENT,
-                            useFixedBase=False,
-                            globalScaling=2,
-                            flags=p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
-                            )
-            # print("Sphere velocity = " + str(p.getBaseVelocity(drone_index, physicsClientId=self.CLIENT)))
-            # projectivle are black
-            p.changeVisualShape(temp, -1, rgbaColor=[0, 0, 0, 1], physicsClientId=self.CLIENT)
-            p.resetBaseVelocity(temp, target, [0, 0, 0], physicsClientId=self.CLIENT)
-            return temp
+        shoot_target = (
+            self.from2Dto3D(BLUE_ARRAY_TARGET[drone_index,0:3]) 
+            if drone_index in [0,1,2,3] else
+            self.from2Dto3D(RED_ARRAY_TARGET[drone_index%4,0:3]))
+        # print("shoot_target", shoot_target)
+        rot_mat = np.array(p.getMatrixFromQuaternion(self.quat[drone_index, :])).reshape(3, 3)
+        #### Set target point, camera view and projection matrices #
+        target = np.dot(rot_mat, shoot_target) + np.array(self.pos[drone_index, :])
+        # fix drone index, 0 is the floor
+        drone_index += 1
+        # print(target)
+        pos_and_orientation = p.getBasePositionAndOrientation(drone_index)
+        # print("#############################################################################")
+        # print("pos_and_orientation", pos_and_orientation)
+        # print("#############################################################################")
+        pos = np.array(pos_and_orientation[0]) + 0.2
+        temp = p.loadURDF("sphere_small.urdf",
+                          pos,
+                          p.getQuaternionFromEuler([0, 0, 0]),
+                          physicsClientId=self.CLIENT,
+                          useFixedBase=False,
+                          globalScaling=2,
+                          flags=p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
+                          )
+        # print("Sphere velocity = " + str(p.getBaseVelocity(drone_index, physicsClientId=self.CLIENT)))
+        # projectivle are black
+        p.changeVisualShape(temp, -1, rgbaColor=[0, 0, 0, 1], physicsClientId=self.CLIENT)
+        p.resetBaseVelocity(temp, target, [0, 0, 0], physicsClientId=self.CLIENT)
+        return temp
 
     ################################################################################
     def _computeReward(self):
@@ -648,38 +597,27 @@ class BattleAviary(BaseMultiagentAviary):
         rewards = {}
         states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
         # rewards[1] = -1 * np.linalg.norm(np.array([states[1, 0], states[1, 1], 0.5]) - states[1, 0:3])**2 # DEBUG WITH INDEPENDENT REWARD
-        nd = self.NUM_DRONES//2
+
         for i in range(self.NUM_DRONES):
-            if self.step_counter <= self.SIM_FREQ*3:#3 seconds not passed
-                if array_target[i][3]:  #see the enemy
-                    rewards[i] = 0.005
-                else: #not see the enemy
-                    rewards[i] = -0.001
-
-            else:
-                #start FIGHT
-
-                if i in range(nd) and states[2, 2] < 1.1 or states[3, 2] < 1.1: #BLUE  i've killed
-                    print("red drone down")
-                    rewards[i] = 1             
-                elif i in range(nd,nd*2) and states[0, 2] < 1.1 or states[1,2] < 1.1: # RED i've killed
-                    print("blue drone down")
-                    rewards[i] = 1 
+            if states[i, 2] < 0.5:  # sono stato atterrato
+                rewards[i] = -1
+                #if self.step_counter/self.SIM_FREQ < 3
+            elif NUM_SPHERES[i] == -1: # Shooting a sphere when they are ended.
+                NUM_SPHERES[i] = 0
+                rewards[i] = -0.5
+            elif self.step_counter <= 240*3 and array_target[i][4]: # sparo nei primi 3 secondi.
+                rewards[i] = -1
+            elif array_target[i][3] and array_target[i][4]:  # vedo e sparo
+                if states[(i + 1) % 2, 2] < 0.5:  # ho atterrato
+                    rewards[i] = 1  # ho ucciso
                 else:
-                    rewards[i] = 0
-
-                if states[i, 2] < 1.1:  # i've been shot    
-                    rewards[i] += -1
-                elif NUM_SPHERES[i] == -1 and array_target[i][4] : # Shooting a sphere when they are ended.
-                    rewards[i] += -1
-                elif array_target[i][3] and array_target[i][4]:
-                    rewards[i] += 0.05 # i shot and i see         
-                elif array_target[i][3] and array_target[i][4] == False:  #see the enemy but i don't shoot
-                    rewards[i] += 0.005
-                elif array_target[i][3] == False and array_target[i][4]:  #don't see the enemy but i shoot, wasting balls
-                    rewards[i] += -0.5
-                else:  #don't see the enemy and i don't shoot i'm useless :("
-                    rewards[i] += -0.001
+                    rewards[i] = 0.1  # ho visto e sparato
+            elif array_target[i][3] and array_target[i][4] == False:  # vedo e ma non sparo
+                rewards[i] = 0.05  # ho visto
+            elif array_target[i][3] == False and array_target[i][4]:  # non vedo e sparo
+                rewards[i] = -0.1
+            else:  # non vedo e non sparo
+                rewards[i] = -0.05
         return rewards
 
     ################################################################################
@@ -694,49 +632,28 @@ class BattleAviary(BaseMultiagentAviary):
             one additional boolean value for key "__all__".
 
         """
-        
         global NUM_SPHERES
-        global TIME_OF_SIM
-        bool_val = True if self.step_counter / self.SIM_FREQ >= TIME_OF_SIM else False
-        done = {i: bool_val for i in range(self.NUM_DRONES)}
+        done = {i: self.step_counter>self.max_steps for i in range(self.NUM_DRONES)}
         done["__all__"] = False
-        if not bool_val:
-            states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
-            if NUM_SPHERES[0] < 0 and NUM_SPHERES[1] < 0 and NUM_SPHERES[2] < 0 and NUM_SPHERES[3] < 0:
-                done["__all__"] = True    
-            else:
+
+        #if self.step_counter == 300:
+        #    done[0] = True
+        #    self._agent_ids.remove(0)
+        states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+        for i in range(self.NUM_DRONES):
+            if states[i, 2] < 0.3:  # if drone is on the ground
+                done[i] = True
+                done["__all__"] = True
+                # reset number of spheres in each drone.
                 for i in range(self.NUM_DRONES):
-                    if states[i, 2] <= 1.02:  # if one drone is on the ground
-                        done["__all__"] = True
-                         
-        else:
-            done["__all__"] = True    
-        
+                    NUM_SPHERES[i] = 5
+                break
+        if self.step_counter > self.max_steps:
+            done["__all__"] = True
+            # reset number of spheres in each drone.
+            for i in range(self.NUM_DRONES):
+                NUM_SPHERES[i] = 5
         return done
-
-
-        # global NUM_SPHERES
-        # done = {i: self.step_counter>self.max_steps for i in range(self.NUM_DRONES)}
-        # done["__all__"] = False
-
-        # #if self.step_counter == 300:
-        # #    done[0] = True
-        # #    self._agent_ids.remove(0)
-        # states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
-        # for i in range(self.NUM_DRONES):
-        #     if states[i, 2] < 0.3:  # if drone is on the ground
-        #         done[i] = True
-        #         done["__all__"] = True
-        #         # reset number of spheres in each drone.
-        #         for i in range(self.NUM_DRONES):
-        #             NUM_SPHERES[i] = 5
-        #         break
-        # if self.step_counter > self.max_steps:
-        #     done["__all__"] = True
-        #     # reset number of spheres in each drone.
-        #     for i in range(self.NUM_DRONES):
-        #         NUM_SPHERES[i] = 5
-        # return done
 
     ################################################################################
 
@@ -752,21 +669,20 @@ class BattleAviary(BaseMultiagentAviary):
 
     def _computeObs(self):
         global NUM_SPHERES
-        global TIME_OF_SIM
         obs = super()._computeObs()
         
         for i in obs.keys():
             # print(self._getDroneImages(i, False).flatten)
-            
-            #if (self.pos[i,2]>0.2):
             obs[i] = np.concatenate(
-            (
-                obs[i],
-                np.array(self._getDroneImages(i, False) / 255, dtype=np.float64).flat, # concatenate image matrix
-                np.array([NUM_SPHERES[i]]), # and spheres num
-                np.array([self.step_counter / self.SIM_FREQ/ (0.1+TIME_OF_SIM)]) # and step counter for time passed from the beginning.
-            ))    
-                               
+                (
+                    obs[i],
+                    np.array(self._getDroneImages(i, False) / 255, dtype=np.float64).flat, # concatenate image matrix
+                    np.array([NUM_SPHERES[i]]), # and spheres num
+                    np.array([self.step_counter / self.max_steps /10 ]) # and step counter for time passed from the beginning.
+                )
+            ) 
+        print(NUM_SPHERES)
+        print(self.step_counter)                                 
         return obs
 
     def _computeInfo(self):

@@ -152,7 +152,7 @@ class BaseAviary(gym.Env):
         #### Connect to PyBullet ###################################
         if self.GUI:
             #### With debug GUI ########################################
-            self.CLIENT = p.connect(p.GUI, options="--opengl2") # p.connect(p.GUI)
+            self.CLIENT = p.connect(p.GUI) # p.connect(p.GUI)
             for i in [p.COV_ENABLE_RGB_BUFFER_PREVIEW, p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW]:
                 p.configureDebugVisualizer(i, 0, physicsClientId=self.CLIENT)
             p.resetDebugVisualizerCamera(cameraDistance=3,
@@ -175,7 +175,7 @@ class BaseAviary(gym.Env):
             self.CLIENT = p.connect(p.DIRECT)
             #### Uncomment the following line to use EGL Render Plugin #
             #### Instead of TinyRender (CPU-based) in PYB's Direct mode
-            # if platform == "linux": p.setAdditionalSearchPath(pybullet_data.getDataPath()); plugin = p.loadPlugin(egl.get_filename(), "_eglRendererPlugin"); print("plugin=", plugin)
+            #if platform == "linux": p.setAdditionalSearchPath(pybullet_data.getDataPath()); plugin = p.loadPlugin(egl.get_filename(), "_eglRendererPlugin"); print("plugin=", plugin)
             if self.RECORD:
                 #### Set the camera parameters to save frames in DIRECT mode
                 self.VID_WIDTH=int(640)
