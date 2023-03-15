@@ -133,8 +133,8 @@ if __name__ == "__main__":
         "num_gpus": torch.cuda.device_count(),
         "batch_mode": "complete_episodes",
         "framework": "torch",
-        "lr": 1e-4,
-        "entropy_coeff": 0.0000001,
+        "lr": 1e-5,
+        #"entropy_coeff": 0.000001,
         "gamma": 0.9999,
         "preprocessor_pref": "deepmind",
         # "lr": 5e-3,
@@ -154,7 +154,7 @@ if __name__ == "__main__":
     }
     stop = {
         #"timesteps_total": 29000,  # 100000 ~= 10'
-        "timesteps_total": 1000000
+        "timesteps_total": 750000
         # "episode_reward_mean": 0,
         # "training_iteration": 100,
     }
@@ -225,7 +225,7 @@ if __name__ == "__main__":
             print("[ERROR] unknown ActionType")
             exit()
         start = time.time()
-        for i in range(30 * int(temp_env.SIM_FREQ / temp_env.AGGR_PHY_STEPS)):  # Up to 15*240 = 3600 step of simulation'
+        for i in range(15 * int(temp_env.SIM_FREQ / temp_env.AGGR_PHY_STEPS)):  # Up to 15*240 = 3600 step of simulation'
             #### Deploy the policies ###################################
             temp = {}
             temp[0] = policy0.compute_single_action(

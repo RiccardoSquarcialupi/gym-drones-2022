@@ -20,7 +20,7 @@ RED_ARRAY_TARGET = np.array([[0, 0, 0, False, False],[0, 0, 0, False, False]])
 
 TIME_OF_SIM = 12
 # resolution of virtual camera of each drone.
-CAMERA_VISION = [100, 75]
+CAMERA_VISION = [100,75]
 
 # number of spheres in each drone that can be shooted.
 NUM_SPHERES = np.array([5,5,5,5])
@@ -402,7 +402,7 @@ class BattleAviary(BaseMultiagentAviary):
                     for i in range(0, CAMERA_VISION[0]):
                         for j in range(0, CAMERA_VISION[1]):
                             if mask[j, i] != 0:
-                                RED_ARRAY_TARGET[n, 0:3] = np.array([100, (CAMERA_VISION[0] / 2)-i-2, (CAMERA_VISION[1] / 2)-j-2])
+                                RED_ARRAY_TARGET[n, 0:3] = np.array([100, (CAMERA_VISION[0] // 2)-i-2, (CAMERA_VISION[1] // 2)-j-2])
                                 break
                         if RED_ARRAY_TARGET[n, 0] == 100:
                             RED_ARRAY_TARGET[n, 3] = True
@@ -428,7 +428,7 @@ class BattleAviary(BaseMultiagentAviary):
                     for i in range(0, CAMERA_VISION[0]):
                         for j in range(0, CAMERA_VISION[1]):
                             if mask[j, i] != 0:
-                                BLUE_ARRAY_TARGET[n, 0:3] = np.array([100,(CAMERA_VISION[0] / 2)-i-2,  (CAMERA_VISION[1] / 2)-j-2])
+                                BLUE_ARRAY_TARGET[n, 0:3] = np.array([100,(CAMERA_VISION[0] // 2)-i-2,  (CAMERA_VISION[1] // 2)-j-2])
                                 break
                         if BLUE_ARRAY_TARGET[n, 0] == 100:
                             BLUE_ARRAY_TARGET[n, 3] = True
@@ -654,21 +654,19 @@ class BattleAviary(BaseMultiagentAviary):
                 if array_target[i][3]:  #see the enemy
                     rewards[i] = 0.005
                 else: #not see the enemy
-                    rewards[i] = -0.001
+                    rewards[i] = -0.005
 
             else:
                 #start FIGHT
-
-                if i in range(nd) and states[2, 2] < 1.1 or states[3, 2] < 1.1: #BLUE  i've killed
+                rewards[i] = 0
+                if i in range(nd) and (states[2, 2] < 1.05 or states[3, 2] < 1.05): #BLUE  i've killed
                     print("red drone down")
                     rewards[i] = 1             
-                elif i in range(nd,nd*2) and states[0, 2] < 1.1 or states[1,2] < 1.1: # RED i've killed
+                elif i in range(nd,nd*2) and (states[0, 2] < 1.05 or states[1, 2] < 1.05): # RED i've killed
                     print("blue drone down")
-                    rewards[i] = 1 
-                else:
-                    rewards[i] = 0
+                    rewards[i] = 1                     
 
-                if states[i, 2] < 1.1:  # i've been shot    
+                if states[i, 2] < 1.05:  # i've been shot    
                     rewards[i] += -1
                 elif NUM_SPHERES[i] == -1 and array_target[i][4] : # Shooting a sphere when they are ended.
                     rewards[i] += -1
@@ -679,7 +677,7 @@ class BattleAviary(BaseMultiagentAviary):
                 elif array_target[i][3] == False and array_target[i][4]:  #don't see the enemy but i shoot, wasting balls
                     rewards[i] += -0.5
                 else:  #don't see the enemy and i don't shoot i'm useless :("
-                    rewards[i] += -0.001
+                    rewards[i] += -0.005
         return rewards
 
     ################################################################################
@@ -706,7 +704,7 @@ class BattleAviary(BaseMultiagentAviary):
                 done["__all__"] = True    
             else:
                 for i in range(self.NUM_DRONES):
-                    if states[i, 2] <= 1.02:  # if one drone is on the ground
+                    if states[i, 2] <= 1.025:  # if one drone is on the ground
                         done["__all__"] = True
                          
         else:
